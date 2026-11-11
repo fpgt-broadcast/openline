@@ -17,6 +17,12 @@ docker compose logs openline     # shows the first-run admin password
 
 In the tunnel, add a public hostname such as `intercom.example.com` → `http://openline:8999`. WebSockets work through Cloudflare by default. Then open `https://intercom.example.com/admin.html`, sign in, and set **Server → Public URL** so invite links and QR codes use it.
 
+To update the tunnel agent (the Cloudflare dashboard flags old versions as *Unsupported*):
+
+```bash
+docker compose pull cloudflared && docker compose up -d
+```
+
 No Docker? Install `cloudflared` and run `cloudflared tunnel run --token …` next to `openline-server`.
 
 ## Option 2: Public IP + automatic Let's Encrypt

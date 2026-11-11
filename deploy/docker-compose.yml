@@ -12,7 +12,9 @@ services:
     ports:
       - "8999:8999" # LAN access; remove if you only use the tunnel
   cloudflared:
-    image: cloudflare/cloudflared:2024.12.2
+    # "latest" tracks Cloudflare's supported release (versions expire after ~1 year).
+    # Update with: docker compose pull cloudflared && docker compose up -d
+    image: cloudflare/cloudflared:latest
     restart: unless-stopped
     command: tunnel --no-autoupdate run
     environment:
