@@ -43,6 +43,16 @@ intercom.example.com {
 }
 ```
 
+## Option 5: Local network only (no internet, no domain)
+
+```bash
+./openline-server -self-signed
+```
+
+This serves `https://<LAN-IP>:8999` with a self-signed certificate made for this machine's addresses (it's stored in `data/` and reused). On each device, accept the warning once. On iPhone Safari that's **Show Details → visit this website**; in Chrome it's **Advanced → Proceed**.
+
+> Plain `http://192.168.x.x` does **not** work for talking. Browsers turn off the microphone and audio engine on non-HTTPS pages (only `localhost` is exempt), and the app says so on the login screen.
+
 ## First run
 
 1. Start the server. It prints the **admin password** once, plus the LAN URLs and a QR code.

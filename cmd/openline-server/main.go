@@ -33,6 +33,7 @@ func main() {
 	email := flag.String("email", "", "contact email for Let's Encrypt (optional)")
 	certFile := flag.String("cert", "", "TLS certificate file (PEM)")
 	keyFile := flag.String("key", "", "TLS key file (PEM)")
+	selfSigned := flag.Bool("self-signed", false, "serve HTTPS with an auto-generated certificate (LAN use without internet/domain; browsers warn once)")
 	resetAdmin := flag.String("reset-admin", "", "set a new admin password and exit")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
@@ -64,7 +65,11 @@ func main() {
 	srv := server.New(store, web.FS())
 	h := srv.Handler()
 
-	banner(store, genPass, *listen, *domain, *certFile != "")
+	banner(store, genPass, *listen, *domain, *certFile != "" || *selfSigned)
+	if *selfSigned && *domain == "" && *certFile == "" {
+		fmt.Println(" Self-signed HTTPS: on each device, accept the certificate warning once")
+		fmt.Println(" (iPhone Safari: Show Details > visit this website; Chrome: Advanced > Proceed).")
+	}
 
 	switch {
 	case *domain != "":
@@ -88,6 +93,14 @@ func main() {
 	case *certFile != "":
 		hs := &http.Server{Addr: *listen, Handler: h, ReadHeaderTimeout: 10 * time.Second}
 		log.Fatal(hs.ListenAndServeTLS(*certFile, *keyFile))
+	case *selfSigned:
+		cert, err := selfSignedCert(*dataDir)
+		if err != nil {
+			log.Fatal(err)
+		}
+		hs := &http.Server{Addr: *listen, Handler: h, ReadHeaderTimeout: 10 * time.Second,
+			TLSConfig: &tls.Config{Certificates: []tls.Certificate{cert}}}
+		log.Fatal(hs.ListenAndServeTLS("", ""))
 	default:
 		hs := &http.Server{Addr: *listen, Handler: h, ReadHeaderTimeout: 10 * time.Second}
 		log.Fatal(hs.ListenAndServe())
@@ -124,7 +137,7 @@ func banner(store *server.Store, genPass, listen, domain string, tlsOn bool) {
 		fmt.Printf(" Listening on %s\n", listen)
 		if !tlsOn {
 			fmt.Println(" NOTE: browsers only allow the microphone over HTTPS (or localhost).")
-			fmt.Println("       For off-site use put this behind a tunnel or use -domain. See docs/DEPLOY.md")
+			fmt.Println("       Off-site: use a tunnel or -domain. On the LAN: add -self-signed. See docs/DEPLOY.md")
 		}
 	}
 	for _, u := range urls {
