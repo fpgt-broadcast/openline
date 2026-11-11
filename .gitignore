@@ -1,0 +1,9 @@
+/data/
+/dist/
+/bin/
+firmware/build/
+firmware/managed_components/
+firmware/sdkconfig
+firmware/sdkconfig.old
+node_modules/
+*.test
