@@ -1,0 +1,7 @@
+## Managed components (fetched by idf.py from components.espressif.com)
+dependencies:
+  idf: ">=5.3,<5.5"
+  espressif/esp_websocket_client: "^1.2.3"
+  espressif/led_strip: "^2.5.3"
+  # Any libopus port exposing the standard <opus.h> API works here.
+  78/esp-opus: "^1.0.4"

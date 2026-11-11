@@ -1,0 +1,23 @@
+menu "OpenLine beltpack"
+
+choice OPENLINE_DISPLAY
+    prompt "Display"
+    default OPENLINE_DISPLAY_SH1106
+    config OPENLINE_DISPLAY_SH1106
+        bool "1.3in 128x64 OLED (SH1106, I2C) - cheapest"
+    config OPENLINE_DISPLAY_SSD1306
+        bool "0.96in 128x64 OLED (SSD1306, I2C)"
+    config OPENLINE_DISPLAY_SSD1680
+        bool "2.13in 250x122 e-ink (SSD1680, SPI) - daylight readable, experimental"
+endchoice
+
+config OPENLINE_ETHERNET
+    bool "W5500 Ethernet / PoE fitted"
+    default y
+
+config OPENLINE_EPD_FLIP
+    bool "Rotate e-ink display 180 degrees"
+    depends on OPENLINE_DISPLAY_SSD1680
+    default n
+
+endmenu
