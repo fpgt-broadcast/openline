@@ -15,7 +15,7 @@ docker compose up -d
 docker compose logs openline     # shows the first-run admin password
 ```
 
-In the tunnel, add a public hostname such as `intercom.example.com` → `http://openline:8080`. WebSockets work through Cloudflare by default. Then open `https://intercom.example.com/admin.html`, sign in, and set **Server → Public URL** so invite links and QR codes use it.
+In the tunnel, add a public hostname such as `intercom.example.com` → `http://openline:8999`. WebSockets work through Cloudflare by default. Then open `https://intercom.example.com/admin.html`, sign in, and set **Server → Public URL** so invite links and QR codes use it.
 
 No Docker? Install `cloudflared` and run `cloudflared tunnel run --token …` next to `openline-server`.
 
@@ -31,15 +31,15 @@ Certificates are fetched and renewed automatically. See `deploy/openline.service
 
 ## Option 3: Tailscale (private network)
 
-Install Tailscale on the server and every client, then run `tailscale serve --bg 8080`. Everyone uses the `https://<machine>.<tailnet>.ts.net` URL. Nothing is exposed to the internet. Beltpacks can't join a tailnet, so use the BLE phone mode with them, or use Option 1 or 2.
+Install Tailscale on the server and every client, then run `tailscale serve --bg 8999`. Everyone uses the `https://<machine>.<tailnet>.ts.net` URL. Nothing is exposed to the internet. Beltpacks can't join a tailnet, so use the BLE phone mode with them, or use Option 1 or 2.
 
 ## Option 4: Behind an existing reverse proxy
 
-Run `openline-server -listen 127.0.0.1:8080` and proxy `/` (including the WebSocket upgrade on `/ws`) from Caddy, nginx or Traefik. Caddy example:
+Run `openline-server -listen 127.0.0.1:8999` and proxy `/` (including the WebSocket upgrade on `/ws`) from Caddy, nginx or Traefik. Caddy example:
 
 ```
 intercom.example.com {
-    reverse_proxy 127.0.0.1:8080
+    reverse_proxy 127.0.0.1:8999
 }
 ```
 

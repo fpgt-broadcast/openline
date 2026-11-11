@@ -25,7 +25,7 @@ make build                      # or download a release binary
 ./bin/openline-server           # prints admin password, URLs and a QR code
 ```
 
-Open `http://localhost:8080` and sign in as `Director` / `1111`. Open the URL in a second browser as `Camera 1` / `2222`, then select *Camera* and hold the big button to talk.
+Open `http://localhost:8999` and sign in as `Director` / `1111`. Open the URL in a second browser as `Camera 1` / `2222`, then select *Camera* and hold the big button to talk.
 
 For real off-site use (HTTPS is required for microphones), see **[docs/DEPLOY.md](docs/DEPLOY.md)**.
 

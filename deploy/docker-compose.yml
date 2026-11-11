@@ -1,6 +1,6 @@
 # Server + Cloudflare Tunnel: no port forwarding, automatic HTTPS.
 #   1. In Cloudflare Zero Trust > Networks > Tunnels, create a tunnel and add a
-#      public hostname (e.g. intercom.example.com) -> http://openline:8080
+#      public hostname (e.g. intercom.example.com) -> http://openline:8999
 #   2. Put the tunnel token in deploy/.env as TUNNEL_TOKEN=...
 #   3. docker compose up -d ; docker compose logs openline   (first-run admin password)
 services:
@@ -10,7 +10,7 @@ services:
     volumes:
       - ./data:/data
     ports:
-      - "8080:8080" # LAN access; remove if you only use the tunnel
+      - "8999:8999" # LAN access; remove if you only use the tunnel
   cloudflared:
     image: cloudflare/cloudflared:2024.12.2
     restart: unless-stopped

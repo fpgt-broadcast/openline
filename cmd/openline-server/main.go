@@ -1,6 +1,6 @@
 // Command openline-server is the self-hosted OpenLine intercom server.
 //
-//	openline-server                         # HTTP on :8080 (use behind a tunnel / reverse proxy)
+//	openline-server                         # HTTP on :8999 (use behind a tunnel / reverse proxy)
 //	openline-server -domain intercom.example.com   # automatic HTTPS via Let's Encrypt on :443
 //	openline-server -cert fullchain.pem -key privkey.pem -listen :8443
 package main
@@ -28,7 +28,7 @@ var version = "dev"
 
 func main() {
 	dataDir := flag.String("data", "./data", "directory for config.json and TLS cache")
-	listen := flag.String("listen", ":8080", "listen address (ignored with -domain)")
+	listen := flag.String("listen", ":8999", "listen address (ignored with -domain)")
 	domain := flag.String("domain", "", "public domain name: enables automatic HTTPS (Let's Encrypt) on :443 and :80")
 	email := flag.String("email", "", "contact email for Let's Encrypt (optional)")
 	certFile := flag.String("cert", "", "TLS certificate file (PEM)")
