@@ -287,12 +287,15 @@ func defaultConfig(adminPass string) Config {
 			{ID: 3, Name: "Audio", Color: "#30a46c"},
 			{ID: 4, Name: "Stage", Color: "#f5a524"},
 			{ID: 5, Name: "Program", Color: "#8e8c99", ListenOnly: true, Program: true},
+			{ID: 6, Name: "Announcers", Color: "#a66ef0"},
 		},
 		Users: []User{
-			{Name: "Director", PIN: "1111", Admin: true, Channels: append(all(true, 1, 2, 3, 4), Access{Ch: 5, Listen: true})},
+			{Name: "Director", PIN: "1111", Admin: true, Channels: append(all(true, 1, 6, 2, 3, 4), Access{Ch: 5, Listen: true})},
 			{Name: "Camera 1", PIN: "2222", Channels: append(all(true, 2, 1), Access{Ch: 5, Listen: true})},
 			{Name: "A1", PIN: "3333", Channels: append(all(true, 3, 1), Access{Ch: 5, Listen: true})},
 			{Name: "Program Feed", Bridge: true, Channels: []Access{{Ch: 5, Talk: true}}},
+			// NDI link to the announce booth: their talkback in, IFB (this channel) out.
+			{Name: "Announcer Link", Bridge: true, Channels: []Access{{Ch: 6, Talk: true, Listen: true}}},
 		},
 	}
 }
