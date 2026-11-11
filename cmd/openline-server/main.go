@@ -113,8 +113,12 @@ func banner(store *server.Store, genPass, listen, domain string, tlsOn bool) {
 		if tlsOn {
 			scheme = "https"
 		}
-		_, port, _ := net.SplitHostPort(listen)
-		for _, ip := range lanIPs() {
+		host, port, _ := net.SplitHostPort(listen)
+		hosts := lanIPs()
+		if host != "" && host != "0.0.0.0" && host != "::" {
+			hosts = []string{host}
+		}
+		for _, ip := range hosts {
 			urls = append(urls, fmt.Sprintf("%s://%s:%s", scheme, ip, port))
 		}
 		fmt.Printf(" Listening on %s\n", listen)
