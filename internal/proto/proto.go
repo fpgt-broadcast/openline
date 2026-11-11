@@ -168,6 +168,8 @@ type Welcome struct {
 	Talk     []int         `json:"talk"`   // channel ids currently talking
 	Listen   []int         `json:"listen"` // channel ids currently listening
 	Muted    bool          `json:"muted,omitempty"`
+	// TallyScreen: the admin wants this user's app in the full-screen tally view.
+	TallyScreen bool `json:"tallyScreen,omitempty"`
 }
 
 // Talker is a session currently talking on a channel.

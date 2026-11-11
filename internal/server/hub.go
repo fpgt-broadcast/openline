@@ -40,6 +40,7 @@ type Session struct {
 	call      map[int]bool
 	muted     bool
 	tally     string // program | preview | off
+	tallyView bool   // client reports it is showing the full-screen tally view
 	lastRx    time.Time
 	telemetry *proto.Telemetry
 	telemAt   time.Time
@@ -269,14 +270,15 @@ func (s *Session) sendWelcome() {
 	cfg := h.store.Get()
 	h.mu.RLock()
 	w := proto.Welcome{
-		T:      "welcome",
-		SID:    s.SID,
-		Server: cfg.ServerName,
-		User:   s.user.Name,
-		Admin:  s.user.Admin,
-		Talk:   keys(s.talk),
-		Listen: keys(s.listen),
-		Muted:  s.muted,
+		T:           "welcome",
+		SID:         s.SID,
+		Server:      cfg.ServerName,
+		User:        s.user.Name,
+		Admin:       s.user.Admin,
+		Talk:        keys(s.talk),
+		Listen:      keys(s.listen),
+		Muted:       s.muted,
+		TallyScreen: s.user.TallyScreen,
 	}
 	for _, sl := range s.slots {
 		w.Channels = append(w.Channels, proto.ChannelInfo{
@@ -309,6 +311,10 @@ func (s *Session) HandleControl(m proto.Msg, raw []byte) {
 			s.telemAt = time.Now()
 			s.hub.mu.Unlock()
 		}
+	case "view":
+		s.hub.mu.Lock()
+		s.tallyView = m.On != nil && *m.On
+		s.hub.mu.Unlock()
 	case "tally":
 		var t proto.TallyUpdate
 		if json.Unmarshal(raw, &t) == nil {
@@ -531,6 +537,7 @@ type SessionInfo struct {
 	Call      []int            `json:"call"`
 	Muted     bool             `json:"muted"`
 	Tally     string           `json:"tally"`
+	TallyView bool             `json:"tallyView"`
 	Sending   bool             `json:"sending"`
 	Telemetry *proto.Telemetry `json:"telemetry,omitempty"`
 }
@@ -554,7 +561,7 @@ func (s *Session) infoLocked() SessionInfo {
 	return SessionInfo{
 		SID: s.SID, User: s.user.Name, UserID: s.user.ID, Client: s.Client, Remote: s.Remote,
 		Device: s.DeviceID, Connected: s.Connected, Channels: chs,
-		Talk: keys(s.talk), Listen: keys(s.listen), Call: keys(s.call), Muted: s.muted, Tally: s.tally,
+		Talk: keys(s.talk), Listen: keys(s.listen), Call: keys(s.call), Muted: s.muted, Tally: s.tally, TallyView: s.tallyView,
 		Sending:   len(s.talk) > 0 && time.Since(s.lastRx) < 500*time.Millisecond,
 		Telemetry: s.telemetry,
 	}
@@ -589,7 +596,7 @@ func (h *Hub) Kick(sid uint16) bool {
 
 // RemoteOp is an admin action on a live session.
 type RemoteOp struct {
-	Op string `json:"op"` // talk | listen | call | mute | vol | identify | reboot | kick
+	Op string `json:"op"` // talk | listen | call | mute | vol | tallyscreen | identify | reboot | kick
 	Ch int    `json:"ch,omitempty"`
 	On bool   `json:"on,omitempty"`
 	V  int    `json:"v,omitempty"`
@@ -621,6 +628,9 @@ func (h *Hub) Remote(sid uint16, op RemoteOp) error {
 	case "vol":
 		v := clamp(op.V, 0, 100)
 		s.sendJSON(proto.Msg{T: "remote", Op: "vol", Ch: op.Ch, V: &v})
+	case "tallyscreen":
+		on := op.On
+		s.sendJSON(proto.Msg{T: "remote", Op: "tallyscreen", On: &on})
 	case "identify", "reboot":
 		s.sendJSON(proto.Msg{T: "remote", Op: op.Op})
 	case "kick":

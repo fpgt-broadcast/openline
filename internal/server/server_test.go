@@ -268,3 +268,29 @@ func TestConfigUpdateRebuildsSessions(t *testing.T) {
 	cfg.Channels = append(cfg.Channels, cfg.Channels[0])
 	h.do("PUT", "/api/config", cfg, nil, 400)
 }
+
+func TestTallyScreenControl(t *testing.T) {
+	h := newHarness(t)
+	cam, camRec := h.connect(proto.Msg{User: "Camera 1", PIN: "2222", Client: "web"})
+	// Client reports its view; admin sees it.
+	on := true
+	cam.Send(proto.Msg{T: "view", On: &on})
+	eventually(t, "view reported", func() bool {
+		var ss []SessionInfo
+		h.do("GET", "/api/sessions", nil, &ss, 200)
+		return len(ss) == 1 && ss[0].TallyView
+	})
+	// Admin switches it remotely.
+	h.do("POST", "/api/sessions/1/remote", RemoteOp{Op: "tallyscreen", On: false}, nil, 200)
+	eventually(t, "remote tallyscreen", func() bool { return camRec.has(`"op":"tallyscreen"`) })
+	// Per-user default is carried in the welcome.
+	var cfg Config
+	h.do("GET", "/api/config", nil, &cfg, 200)
+	for i := range cfg.Users {
+		if cfg.Users[i].Name == "Camera 1" {
+			cfg.Users[i].TallyScreen = true
+		}
+	}
+	h.do("PUT", "/api/config", cfg, nil, 200)
+	eventually(t, "welcome tallyScreen", func() bool { return camRec.has(`"tallyScreen":true`) })
+}
