@@ -294,3 +294,40 @@ func TestTallyScreenControl(t *testing.T) {
 	h.do("PUT", "/api/config", cfg, nil, 200)
 	eventually(t, "welcome tallyScreen", func() bool { return camRec.has(`"tallyScreen":true`) })
 }
+
+func TestPersonNames(t *testing.T) {
+	h := newHarness(t)
+	// Admin sets a default person for Camera 1.
+	var cfg Config
+	h.do("GET", "/api/config", nil, &cfg, 200)
+	for i := range cfg.Users {
+		if cfg.Users[i].Name == "Camera 1" {
+			cfg.Users[i].Person = "  John   Doe "
+		}
+	}
+	h.do("PUT", "/api/config", cfg, nil, 200)
+
+	cam, camRec := h.connect(proto.Msg{User: "Camera 1", PIN: "2222", Client: "web"})
+	eventually(t, "default person in welcome", func() bool { return camRec.has(`"person":"John Doe"`) })
+	_, dirRec := h.connect(proto.Msg{User: "Director", PIN: "1111", Client: "web", Name: "Jane Roe"})
+
+	persons := func() map[string]string {
+		var ss []SessionInfo
+		h.do("GET", "/api/sessions", nil, &ss, 200)
+		m := map[string]string{}
+		for _, s := range ss {
+			m[s.User] = s.Person
+		}
+		return m
+	}
+	if p := persons(); p["Camera 1"] != "John Doe" || p["Director"] != "Jane Roe" {
+		t.Fatalf("persons = %v", p)
+	}
+	// The device renames itself; it wins over the admin default and others see it.
+	cam.Send(proto.Msg{T: "name", Name: "Sam Smith (sub)"})
+	eventually(t, "rename", func() bool { return persons()["Camera 1"] == "Sam Smith (sub)" })
+	eventually(t, "others see person", func() bool { return dirRec.has(`"name":"Camera 1","person":"Sam Smith (sub)"`) })
+	// Long names are capped at 40 characters.
+	cam.Send(proto.Msg{T: "name", Name: strings.Repeat("x", 80)})
+	eventually(t, "capped", func() bool { return len(persons()["Camera 1"]) == 40 })
+}

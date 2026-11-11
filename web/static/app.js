@@ -39,7 +39,7 @@ const S = {
   sidMask: new Map(), sidLevel: {}, lastNonProgram: 0,
   rtt: null, latched: false, pttT0: 0, pttIgnoreUp: false, pttActive: false, calling: false,
   audio: null, audioStarting: null, belt: null, beltEnc: null, beltSeq: 0,
-  creds: store.get('creds', null), reconnectDelay: 1000, everWelcomed: false, sheet: null,
+  creds: store.get('creds', null), person: store.get('person', ''), reconnectDelay: 1000, everWelcomed: false, sheet: null,
 };
 
 // ---------------- connection ----------------
@@ -49,7 +49,7 @@ function connect() {
   ws.binaryType = 'arraybuffer';
   S.ws = ws;
   setDot('warn');
-  ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', ver: 1, client: 'web', ...S.creds }));
+  ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', ver: 1, client: 'web', name: S.person || undefined, ...S.creds }));
   ws.onmessage = (e) => {
     if (typeof e.data !== 'string') return onAudio(e.data);
     let m; try { m = JSON.parse(e.data); } catch { return; }
@@ -96,7 +96,8 @@ function onControl(m) {
         S.serverTallyScreen = !!m.tallyScreen;
       }
       reportView();
-      $('hUser').textContent = m.user;
+      S.effectivePerson = m.person || '';
+      $('hUser').textContent = m.user + (m.person ? ' · ' + m.person : '');
       $('hServer').textContent = '· ' + m.server;
       document.title = m.server + ' · OpenLine';
       setDot('ok');
@@ -221,6 +222,14 @@ function setCall(on) {
 }
 
 // ---------------- rendering ----------------
+const who = (t) => t.name + (t.person ? ' · ' + t.person : '');
+
+function setPerson(name) {
+  S.person = (name || '').trim().slice(0, 40);
+  store.set('person', S.person);
+  send({ t: 'name', name: S.person });
+}
+
 function activityText(id) {
   const st = S.state.get(id);
   const me = S.welcome && S.welcome.sid;
@@ -290,7 +299,7 @@ function renderTallyView() {
   v.classList.remove('off', 'program', 'preview');
   v.classList.add(t === 'program' || t === 'preview' ? t : 'off');
   $('tvState').textContent = t === 'program' ? 'ON AIR' : t === 'preview' ? 'PREVIEW' : 'OFF';
-  $('tvUser').textContent = S.welcome ? S.welcome.user : '';
+  $('tvUser').textContent = S.welcome ? S.welcome.user + (S.effectivePerson ? ' · ' + S.effectivePerson : '') : '';
   $('tvDot').className = $('hDot').className;
   // who is talking to me right now
   const me = S.welcome && S.welcome.sid, names = new Set();
@@ -380,7 +389,7 @@ function renderChannelSheet(id) {
   const call = h('button', { disabled: !ch.canTalk && ch.listenOnly }, 'HOLD TO CALL');
   // The sheet re-renders on every state change, so release is tracked globally.
   call.addEventListener('pointerdown', () => { S.sheetCall = id; send({ t: 'call', ch: id, on: true }); });
-  const chip = (t, cls) => h('span', { class: 'chip ' + (cls || '') }, t.name + (t.sid === S.welcome.sid ? ' (you)' : ''));
+  const chip = (t, cls) => h('span', { class: 'chip ' + (cls || '') }, who(t) + (t.sid === S.welcome.sid ? ' (you)' : ''));
   $('sheet').replaceChildren(h('div', { class: 'sheet', style: { '--c': ch.color }, role: 'dialog', 'aria-label': ch.name },
     h('div', { class: 'row' }, h('h2', { class: 'grow' }, ch.name), h('button', { class: 'ghost', onclick: closeSheet }, 'Close')),
     h('div', { class: 'small muted' }, ch.program ? 'Program feed — automatically dipped 12 dB while anyone talks' : ch.listenOnly ? 'Listen-only channel' : 'Party line'),
@@ -413,6 +422,9 @@ async function openSettings() {
   openSheet('settings', null, () => {
     $('sheet').replaceChildren(h('div', { class: 'sheet', role: 'dialog', 'aria-label': 'Settings' },
       h('div', { class: 'row' }, h('h2', { class: 'grow' }, 'Settings'), h('button', { class: 'ghost', onclick: closeSheet }, 'Close')),
+      h('label', { for: 'sName' }, 'Your name (shown to the director and admin)'),
+      h('input', { id: 'sName', type: 'text', maxlength: 40, value: S.person, placeholder: S.effectivePerson || 'e.g. John Doe', autocomplete: 'name',
+        onchange: (e) => setPerson(e.target.value) }),
       h('label', { for: 'sMic' }, 'Microphone'),
       h('select', { id: 'sMic', disabled: !!S.belt, onchange: async (e) => { store.set('mic', e.target.value); await S.audio?.setMic(e.target.value, store.get('aec', true)); } },
         mics.map((d) => opt(d, store.get('mic', ''))), h('option', { value: 'none', selected: store.get('mic', '') === 'none' }, 'No microphone (listen only)')),
@@ -691,14 +703,20 @@ function init() {
     S.creds = { token: hash.get('t') };
     history.replaceState(null, '', location.pathname);
   }
+  $('lname').value = S.person;
+  $('sname').value = S.person;
   $('loginForm').addEventListener('submit', (e) => {
     e.preventDefault();
     S.creds = { user: $('lu').value.trim(), pin: $('lp').value };
+    S.person = $('lname').value.trim().slice(0, 40);
+    store.set('person', S.person);
     S.everWelcomed = false;
     ensureAudio().catch((err) => banner('Audio: ' + err.message, 'bad'));
     connect();
   });
   $('startBtn').addEventListener('click', async () => {
+    const n = $('sname').value.trim();
+    if (n && n !== S.person) setPerson(n);
     try { await ensureAudio(); showApp(); renderAll(); }
     catch (err) { $('startErr').textContent = err.message; }
   });

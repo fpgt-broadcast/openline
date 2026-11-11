@@ -19,6 +19,8 @@
     <input type="text" id="lu" autocomplete="username" required>
     <label for="lp">PIN</label>
     <input type="password" id="lp" inputmode="numeric" autocomplete="current-password" required>
+    <label for="lname">Your name (optional — helps the director find you)</label>
+    <input type="text" id="lname" autocomplete="name" maxlength="40" placeholder="e.g. John Doe">
     <button class="primary" type="submit">Join</button>
     <div class="err" id="loginErr"></div>
     <div class="small muted" style="margin-top:10px"><a href="admin.html">Admin</a></div>
@@ -29,6 +31,8 @@
   <div class="card">
     <h1>Ready</h1>
     <div class="muted small" id="startInfo"></div>
+    <label for="sname">Your name (optional)</label>
+    <input type="text" id="sname" autocomplete="name" maxlength="40" placeholder="e.g. John Doe">
     <button class="primary" id="startBtn">Start audio</button>
     <div class="err" id="startErr"></div>
   </div>

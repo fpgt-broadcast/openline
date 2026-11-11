@@ -82,6 +82,9 @@ type Msg struct {
 	Client string `json:"client,omitempty"` // web | beltpack | bridge | test
 	Ver    int    `json:"ver,omitempty"`
 	Device string `json:"device,omitempty"` // hardware id (MAC) for beltpacks
+	// Name is the person using this device ("John Doe"), sent in hello or a
+	// {"t":"name"} message. The user (login) is their assignment ("Camera 1").
+	Name string `json:"name,omitempty"`
 
 	// talk / listen / call
 	Ch int   `json:"ch,omitempty"`
@@ -164,6 +167,7 @@ type Welcome struct {
 	Server   string        `json:"server"`
 	User     string        `json:"user"`
 	Admin    bool          `json:"admin,omitempty"`
+	Person   string        `json:"person,omitempty"` // effective person name for this session
 	Channels []ChannelInfo `json:"channels"`
 	Talk     []int         `json:"talk"`   // channel ids currently talking
 	Listen   []int         `json:"listen"` // channel ids currently listening
@@ -174,8 +178,9 @@ type Welcome struct {
 
 // Talker is a session currently talking on a channel.
 type Talker struct {
-	SID  uint16 `json:"sid"`
-	Name string `json:"name"`
+	SID    uint16 `json:"sid"`
+	Name   string `json:"name"`             // assignment / user, e.g. "Camera 1"
+	Person string `json:"person,omitempty"` // who it is, e.g. "John Doe"
 }
 
 // ChannelState is live activity on a channel.
