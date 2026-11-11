@@ -1,0 +1,104 @@
+# Builds and attaches all release files when a release is published on GitHub
+# (or a v* tag is pushed). Tags containing "-" (e.g. v0.2.0-beta) become
+# pre-releases when this workflow has to create the release itself.
+name: release
+
+on:
+  release:
+    types: [published]
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)build and attach files to, e.g. v0.1.0-beta"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
+
+jobs:
+  firmware:
+    name: Beltpack firmware
+    runs-on: ubuntu-latest
+    container: espressif/idf:v5.3.2
+    continue-on-error: true # a firmware problem must not block server/bridge files
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: Build
+        shell: bash
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          . "$IDF_PATH/export.sh"
+          git clone --depth 1 -b v1.5.2 https://github.com/xiph/opus firmware/components/opus/libopus
+          cd firmware
+          idf.py set-target esp32s3
+          idf.py build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-build
+          path: |
+            firmware/build/flash_args
+            firmware/build/openline-beltpack.bin
+            firmware/build/bootloader/bootloader.bin
+            firmware/build/partition_table/partition-table.bin
+
+  release:
+    name: Build and attach release files
+    needs: firmware
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q gcc-mingw-w64-x86-64 libopus0
+          python -m pip install -q "esptool~=4.8"
+      - name: Test
+        run: go vet ./... && go test ./...
+      - name: Build opus.dll for the Windows bridge
+        run: |
+          git clone --depth 1 -b v1.5.2 https://github.com/xiph/opus "$RUNNER_TEMP/opus"
+          cmake -S "$RUNNER_TEMP/opus" -B "$RUNNER_TEMP/opus-win" \
+            -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
+            -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON -DOPUS_BUILD_PROGRAMS=OFF -DOPUS_BUILD_TESTING=OFF \
+            -DCMAKE_SHARED_LINKER_FLAGS="-static-libgcc -static"
+          cmake --build "$RUNNER_TEMP/opus-win" -j 4
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: firmware-build
+          path: fwbuild
+      - name: Package
+        run: |
+          FW=""; [ -f fwbuild/openline-beltpack.bin ] && FW="$PWD/fwbuild"
+          ./scripts/package-release.sh "$TAG" "$RUNNER_TEMP/opus-win/libopus.dll" "$FW"
+      - name: Create or update the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" dist/release/* --clobber
+          else
+            PRE=""; case "$TAG" in *-*) PRE="--prerelease";; esac
+            gh release create "$TAG" dist/release/* $PRE --title "OpenLine $TAG" --generate-notes
+          fi
