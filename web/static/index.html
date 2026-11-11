@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#101215">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>OpenLine Intercom</title>
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="login" class="center hidden">
+  <form class="card" id="loginForm" autocomplete="on">
+    <h1 id="loginTitle">OpenLine</h1>
+    <div class="muted small">Sign in with your name and PIN, or open the invite link you were sent.</div>
+    <label for="lu">Name</label>
+    <input type="text" id="lu" autocomplete="username" required>
+    <label for="lp">PIN</label>
+    <input type="password" id="lp" inputmode="numeric" autocomplete="current-password" required>
+    <button class="primary" type="submit">Join</button>
+    <div class="err" id="loginErr"></div>
+    <div class="small muted" style="margin-top:10px"><a href="admin.html">Admin</a></div>
+  </form>
+</div>
+
+<div id="start" class="center hidden">
+  <div class="card">
+    <h1>Ready</h1>
+    <div class="muted small" id="startInfo"></div>
+    <button class="primary" id="startBtn">Start audio</button>
+    <div class="err" id="startErr"></div>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <header class="top">
+    <div class="who"><b id="hUser"></b> <span class="muted small" id="hServer"></span></div>
+    <span class="dot" id="hDot"></span>
+    <span class="small muted" id="hRtt">–</span>
+    <div class="meter" aria-label="Mic level"><i id="hMic"></i></div>
+    <button class="ghost" id="menuBtn" aria-label="Settings">Menu</button>
+  </header>
+  <div id="banner" class="banner hidden"></div>
+  <div class="colhead"><span>TALK TO</span><span class="grow">CHANNEL</span><span>LISTEN</span></div>
+  <div id="channels"></div>
+  <div class="ptt-area">
+    <div class="actions">
+      <button id="callBtn">CALL</button>
+      <button id="clearBtn" class="ghost">CLEAR TARGETS</button>
+    </div>
+    <button id="ptt"><span class="big">HOLD TO TALK</span><span class="sub" id="pttSub">select channels above</span></button>
+  </div>
+</div>
+
+<div id="sheet" class="sheet-bg hidden"></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

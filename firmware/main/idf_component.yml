@@ -1,0 +1,6 @@
+## Managed components (fetched by idf.py from components.espressif.com)
+dependencies:
+  idf: ">=5.3,<5.5"
+  espressif/esp_websocket_client: "^1.2.3"
+  espressif/led_strip: "^3.0.0"
+# Opus is built from source by components/opus (see firmware/README.md).

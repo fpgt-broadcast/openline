@@ -1,0 +1,20 @@
+# /etc/systemd/system/openline.service
+#   sudo useradd -r -s /usr/sbin/nologin openline
+#   sudo mkdir -p /var/lib/openline && sudo chown openline /var/lib/openline
+#   sudo cp openline-server /usr/local/bin/ && sudo systemctl enable --now openline
+#   journalctl -u openline   (first-run admin password)
+[Unit]
+Description=OpenLine intercom server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=openline
+ExecStart=/usr/local/bin/openline-server -data /var/lib/openline -domain intercom.example.com
+# -domain binds :443 and :80 (Let's Encrypt); this lets a non-root user do that
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

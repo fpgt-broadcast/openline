@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101215">
+<title>OpenLine Admin</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="login" class="center">
+  <form class="card" id="loginForm">
+    <h1>Admin</h1>
+    <div class="muted small">Admin password (printed on first server start), or an admin user's name + PIN.</div>
+    <label for="ap">Admin password</label>
+    <input type="password" id="ap" autocomplete="current-password">
+    <div class="small muted" style="margin:10px 0 0">— or —</div>
+    <div class="row"><div class="grow"><label for="au">User</label><input type="text" id="au"></div>
+    <div style="width:110px"><label for="apin">PIN</label><input type="password" id="apin" inputmode="numeric"></div></div>
+    <button class="primary" type="submit">Sign in</button>
+    <div class="err" id="loginErr"></div>
+    <div class="small muted" style="margin-top:10px"><a href="./">← Intercom</a></div>
+  </form>
+</div>
+<div id="main" class="admin hidden">
+  <div class="row">
+    <h1 class="grow" style="font-size:18px;margin:0" id="title">OpenLine Admin</h1>
+    <span id="dirty" class="pill warn hidden">unsaved changes</span>
+    <button id="saveBtn" disabled>Save changes</button>
+    <a href="./" class="small">Intercom</a>
+  </div>
+  <div class="tabs" role="tablist">
+    <button data-tab="live">Live</button>
+    <button data-tab="devices">Beltpacks</button>
+    <button data-tab="users">Users</button>
+    <button data-tab="channels">Channels</button>
+    <button data-tab="server">Server</button>
+  </div>
+  <div id="msg" class="banner hidden" style="border-radius:8px;margin-bottom:10px"></div>
+  <section id="tab-live"></section>
+  <section id="tab-devices" class="hidden"></section>
+  <section id="tab-users" class="hidden"></section>
+  <section id="tab-channels" class="hidden"></section>
+  <section id="tab-server" class="hidden"></section>
+</div>
+<script type="module" src="admin.js"></script>
+</body>
+</html>
