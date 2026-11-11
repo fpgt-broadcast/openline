@@ -55,6 +55,12 @@ hardware/             beltpack reference design
 deploy/               docker compose (with Cloudflare Tunnel), systemd unit
 ```
 
+## Downloads
+
+Ready-made builds are on the [Releases page](https://github.com/DueHack12/openline/releases): the server for every OS, the **Windows bridge zip** (with `opus.dll`), and the beltpack firmware image.
+
+**Making a release:** on GitHub, go to Releases → *Draft a new release*, type a new tag such as `v0.2.0` (add `-beta` for a pre-release), and publish. The `release` workflow then builds and attaches every file within a few minutes. You can re-run it for an existing tag from Actions → release → *Run workflow*.
+
 ## Development
 
 ```bash
