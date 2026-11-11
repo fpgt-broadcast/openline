@@ -220,15 +220,19 @@ function openProvision() {
 }
 
 // ---------------- Users ----------------
+const parseTally = (v) => [...new Set(v.split(/[ ,]+/).map((x) => parseInt(x, 10)).filter((n) => n > 0))];
 const accessLabel = (a) => a.talk && a.listen ? 'Talk+Listen' : a.talk ? 'Talk' : a.listen ? 'Listen' : '';
 
 function renderUsers() {
   const users = A.cfg.users;
   const table = h('div', { class: 'tablebox' }, h('table', {},
-    h('thead', {}, h('tr', {}, ['Name', 'PIN', 'Role', 'Channels (key order)', ''].map((t) => h('th', {}, t)))),
+    h('thead', {}, h('tr', {}, ['Name', 'PIN', 'vMix tally', 'Role', 'Channels (key order)', ''].map((t) => h('th', {}, t)))),
     h('tbody', {}, users.map((u) => h('tr', {},
       h('td', {}, h('input', { type: 'text', value: u.name, oninput: (e) => { u.name = e.target.value; setDirty(); } })),
       h('td', { style: { width: '90px' } }, h('input', { type: 'text', value: u.pin || '', placeholder: 'none', inputmode: 'numeric', oninput: (e) => { u.pin = e.target.value.trim(); setDirty(); } })),
+      h('td', { style: { width: '90px' } }, h('input', { type: 'text', value: (u.tally || []).join(', '), placeholder: 'none', inputmode: 'numeric',
+        title: 'vMix input number(s) this person is on, e.g. 2 or 2, 5', 'aria-label': u.name + ' vMix tally input',
+        oninput: (e) => { u.tally = parseTally(e.target.value); setDirty(); } })),
       h('td', { class: 'small' },
         h('label', { style: { margin: 0, color: 'inherit' } }, h('input', { type: 'checkbox', checked: !!u.admin, onchange: (e) => { u.admin = e.target.checked; setDirty(); } }), ' admin'),
         h('label', { style: { margin: 0, color: 'inherit' } }, h('input', { type: 'checkbox', checked: !!u.bridge, onchange: (e) => { u.bridge = e.target.checked; setDirty(); } }), ' NDI bridge')),
@@ -239,7 +243,7 @@ function renderUsers() {
     )))));
   $('tab-users').replaceChildren(
     h('div', { class: 'row', style: { marginBottom: '8px' } },
-      h('div', { class: 'grow small muted' }, 'Each user is a login (a person, a beltpack role, or an NDI bridge link). Channel order = beltpack key order.'),
+      h('div', { class: 'grow small muted' }, 'Each user is a login (a person, a beltpack role, or an NDI bridge link). Names are yours to choose. vMix tally = the vMix input number(s) that person is on. Channel order = beltpack key order.'),
       h('button', { onclick: () => { const u = { name: 'New user ' + (users.length + 1), pin: '', channels: [], token: '' }; users.push(u); A.editUser = u; setDirty(); renderUsers(); } }, 'Add user')),
     table, A.editUser ? userEditor(A.editUser) : null);
 }
@@ -277,7 +281,7 @@ function userEditor(u) {
     ))))),
     h('label', {}, 'vMix tally inputs (input numbers this user is, e.g. camera on input 2 → "2")'),
     h('input', { type: 'text', inputmode: 'numeric', placeholder: 'none', value: (u.tally || []).join(', '),
-      oninput: (e) => { u.tally = e.target.value.split(/[ ,]+/).map((x) => parseInt(x, 10)).filter((n) => n > 0); setDirty(); } }),
+      oninput: (e) => { u.tally = parseTally(e.target.value); setDirty(); } }),
     h('div', { class: 'row', style: { marginTop: '10px', flexWrap: 'wrap' } },
       h('button', { onclick: () => { u.token = ''; setDirty(); msg('New token is generated when you save. Old invite links and devices using it stop working.'); } }, 'Regenerate token'),
       h('button', { class: 'ghost', onclick: () => { if (confirm(`Delete ${u.name}?`)) { A.cfg.users.splice(A.cfg.users.indexOf(u), 1); A.editUser = null; setDirty(); renderUsers(); } } }, 'Delete user')),
