@@ -2,6 +2,5 @@
 dependencies:
   idf: ">=5.3,<5.5"
   espressif/esp_websocket_client: "^1.2.3"
-  espressif/led_strip: "^2.5.3"
-  # Any libopus port exposing the standard <opus.h> API works here.
-  78/esp-opus: "^1.0.4"
+  espressif/led_strip: "^3.0.0"
+# Opus is built from source by components/opus (see firmware/README.md).

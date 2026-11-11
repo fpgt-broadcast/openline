@@ -66,7 +66,7 @@ make release    # cross-compiled binaries for linux/macOS/windows, amd64/arm64 (
 |---|---|
 | Server, web app, admin | Working; covered by Go tests and a two-browser end-to-end audio test |
 | NDI bridge | Audio path tested with libopus and test tones. The NDI binding follows the SDK headers but needs a first run against a real NDI source. |
-| Beltpack firmware | Complete source, **not yet compiled or run on hardware** |
+| Beltpack firmware | Compiles cleanly with ESP-IDF 5.3.2 (OLED/Ethernet and e-ink variants). **Not yet run on hardware.** |
 | Beltpack hardware | Reference design, pin map and BOM. The PCB is not laid out yet. Start with the dev-board prototype. |
 
 Known limits:

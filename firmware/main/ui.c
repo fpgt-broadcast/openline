@@ -288,7 +288,7 @@ static void render(void)
     // right side: mode on line 1, battery on line 2 (small font, drawn inverted on bar)
     disp_text(W - (int)strlen(m2) * 6 - 1, 0, m2, false, true);
     {
-        char b[8];
+        char b[16];
         if (g_ui.battery < 0) snprintf(b, sizeof(b), "EXT");
         else snprintf(b, sizeof(b), "%d%%", g_ui.battery);
         disp_text(W - (int)strlen(b) * 6 - 1, 8, b, false, true);

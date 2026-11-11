@@ -73,8 +73,8 @@ void keys_init(void)
     led_strip_config_t sc = {
         .strip_gpio_num = PIN_LEDS,
         .max_leds = NUM_KEYS,
-        .led_pixel_format = LED_PIXEL_FORMAT_GRB,
         .led_model = LED_MODEL_WS2812,
+        .color_component_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB,
     };
     led_strip_rmt_config_t rc = {.clk_src = RMT_CLK_SRC_DEFAULT, .resolution_hz = 10 * 1000 * 1000};
     if (led_strip_new_rmt_device(&sc, &rc, &s_strip) == ESP_OK) led_strip_clear(s_strip);

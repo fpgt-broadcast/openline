@@ -9,3 +9,4 @@ node_modules/
 *.test
 /deploy/data/
 /deploy/.env
+firmware/components/opus/libopus/

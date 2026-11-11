@@ -10,7 +10,7 @@ A low-cost beltpack with a 4-pin XLR headset jack, 4 talk keys with RGB LEDs, a 
 
 The firmware is in [`../firmware`](../firmware). Variant options are `idf.py menuconfig` → *OpenLine beltpack*.
 
-> Status: this is a reference design and pin map, not a fabricated, validated PCB. The firmware has not been compiled or run on hardware yet. Build the dev-board prototype below first to bring up the codec, display and keys, then lay out the PCB from this document.
+> Status: this is a reference design and pin map, not a fabricated, validated PCB. The firmware compiles but has not been run on hardware yet. Build the dev-board prototype below first to bring up the codec, display and keys, then lay out the PCB from this document.
 
 ## Block diagram
 
@@ -129,7 +129,9 @@ For the cheapest build, leave out the PoE parts (OL-1), use an LDO instead of th
 Flash it with ESP-IDF 5.3 or 5.4:
 
 ```bash
-cd firmware && idf.py set-target esp32s3 && idf.py menuconfig && idf.py build flash monitor
+cd firmware
+git clone --depth 1 -b v1.5.2 https://github.com/xiph/opus components/opus/libopus
+idf.py set-target esp32s3 && idf.py menuconfig && idf.py build flash monitor
 ```
 
 Then pair it from the OpenLine app (**Menu → Connect beltpack**), or provision it for Wi‑Fi/Ethernet from **Admin → Beltpacks → Set up beltpack via Bluetooth**.
