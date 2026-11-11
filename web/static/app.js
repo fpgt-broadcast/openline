@@ -93,7 +93,9 @@ function onControl(m) {
       document.title = m.server + ' · OpenLine';
       setDot('ok');
       banner(null);
-      if (S.audio) showApp(); else showStart();
+      if (S.audio) showApp();
+      else if (S.audioStarting) S.audioStarting.then(() => { showApp(); renderAll(); }, showStart);
+      else showStart();
       renderAll();
       break;
     }
@@ -160,8 +162,13 @@ function setListen(id, on) {
   send({ t: 'listen', ch: id, on });
 }
 
+// Beltpack audio route: 'belt' = headset on the beltpack; 'phone' = beltpack is a
+// remote control only and audio uses this device (AirPods, BT/wired headset...).
+const beltAudio = () => store.get('beltAudio', 'belt');
+const beltCarriesAudio = () => !!S.belt && beltAudio() === 'belt';
+
 function updateTransmit() {
-  if (S.audio) S.audio.transmit = S.talk.size > 0 && !S.belt;
+  if (S.audio) S.audio.transmit = S.talk.size > 0 && !beltCarriesAudio();
 }
 
 // ---------------- PTT ----------------
@@ -360,8 +367,11 @@ async function openSettings() {
         [[40, 'Low latency (good networks)'], [60, 'Normal'], [120, 'Safe (bad cellular / Wi‑Fi)']].map(([v, t]) => h('option', { value: v, selected: store.get('jitter', 60) === v }, t))),
       h('h3', {}, 'Beltpack (Bluetooth)'),
       beltSection(),
-      h('h3', {}, 'Keyboard'),
-      h('div', { class: 'small muted' }, 'Space: hold to talk / tap to latch · 1–9: toggle talk target · C: hold to call'),
+      h('h3', {}, 'Headphone button'),
+      h('label', {}, h('input', { type: 'checkbox', checked: store.get('mediaPTT', false), onchange: (e) => { store.set('mediaPTT', e.target.checked); setupMediaPTT(); } }),
+        ' Headphone play/pause button toggles talk (AirPods stem press, headset button). Experimental — depends on browser/OS.'),
+      h('h3', {}, 'Keyboard / foot pedal'),
+      h('div', { class: 'small muted' }, 'Space: hold to talk / tap to latch · 1–9: toggle talk target · C: hold to call. USB foot pedals that send Space work as a PTT.'),
       h('div', { class: 'grid2' },
         h('a', { href: 'admin.html', class: 'small', style: { alignSelf: 'center' } }, 'Admin page'),
         h('button', { onclick: logout }, 'Sign out')),
@@ -372,9 +382,14 @@ async function openSettings() {
 function beltSection() {
   if (!bleSupported()) return h('div', { class: 'small muted' }, 'This browser has no Web Bluetooth. Use Chrome or Edge on desktop/Android (on iPhone use the Bluefy browser), or run the beltpack in Wi‑Fi/Ethernet mode.');
   if (!S.belt) return h('button', { onclick: connectBelt }, 'Connect beltpack');
+  const viaBelt = beltAudio() === 'belt';
   return h('div', {},
-    h('div', { class: 'small' }, 'Connected: ', h('b', {}, S.belt.name), ' — its keys control your first 4 channels; its mic and headset are used instead of this device.'),
-    h('label', {}, h('input', { type: 'checkbox', checked: store.get('beltMonitor', false), onchange: (e) => { store.set('beltMonitor', e.target.checked); S.audio.setMonitor(e.target.checked); } }), ' Also play audio on this device'),
+    h('div', { class: 'small' }, 'Connected: ', h('b', {}, S.belt.name), ' — its keys control your first 4 channels.'),
+    h('label', { for: 'sBeltAudio' }, 'Audio goes through'),
+    h('select', { id: 'sBeltAudio', onchange: (e) => { store.set('beltAudio', e.target.value); applyBeltAudio(); openSettings(); } },
+      h('option', { value: 'belt', selected: viaBelt }, 'Headset plugged into the beltpack'),
+      h('option', { value: 'phone', selected: !viaBelt }, 'This device (AirPods / Bluetooth / wired headphones) — beltpack is a remote')),
+    viaBelt ? h('label', {}, h('input', { type: 'checkbox', checked: store.get('beltMonitor', false), onchange: (e) => { store.set('beltMonitor', e.target.checked); S.audio.setMonitor(e.target.checked); } }), ' Also play audio on this device') : null,
     h('button', { onclick: () => S.belt.disconnect() }, 'Disconnect beltpack'));
 }
 
@@ -385,7 +400,7 @@ async function connectBelt() {
     const belt = new Beltpack({
       onEvent: onBeltEvent,
       onAudio: (pkt) => { // [seq u16][opus] -> uplink frame
-        if (S.talk.size === 0 || !S.ws || S.ws.readyState !== 1) return;
+        if (!beltCarriesAudio() || S.talk.size === 0 || !S.ws || S.ws.readyState !== 1) return;
         const f = new Uint8Array(pkt.length + 1); f[0] = 1; f.set(pkt, 1); S.ws.send(f);
       },
       onDisconnect: () => {
@@ -397,10 +412,26 @@ async function connectBelt() {
     });
     await belt.connect();
     S.belt = belt; S.beltKeyCache = {};
-    S.beltEnc = S.audio.makeEncoder(24000, (bytes) => {
-      const p = new Uint8Array(bytes.length + 2); p[0] = S.beltSeq >> 8; p[1] = S.beltSeq & 255; S.beltSeq = (S.beltSeq + 1) & 0xffff;
-      p.set(bytes, 2); belt.sendAudio(p);
-    });
+    applyBeltAudio();
+    syncBelt(true);
+    if (S.sheet?.kind === 'settings') openSettings();
+  } catch (e) {
+    if (e && e.name !== 'NotFoundError') banner('Beltpack: ' + e.message, 'bad', 5000);
+  }
+}
+
+function applyBeltAudio() {
+  const belt = S.belt;
+  if (!belt) return;
+  const viaBelt = beltAudio() === 'belt';
+  belt.sendCtrl({ t: 'mode', bridge: 1, audio: viaBelt ? 1 : 0 });
+  if (viaBelt) {
+    if (!S.beltEnc) {
+      S.beltEnc = S.audio.makeEncoder(24000, (bytes) => {
+        const p = new Uint8Array(bytes.length + 2); p[0] = S.beltSeq >> 8; p[1] = S.beltSeq & 255; S.beltSeq = (S.beltSeq + 1) & 0xffff;
+        p.set(bytes, 2); S.belt && S.belt.sendAudio(p);
+      });
+    }
     let ts = 0;
     S.audio.onMix = (pcm) => {
       if (!S.beltEnc || S.beltEnc.state !== 'configured') return;
@@ -409,12 +440,13 @@ async function connectBelt() {
     };
     S.audio.setTap(true);
     S.audio.setMonitor(store.get('beltMonitor', false));
-    updateTransmit();
-    syncBelt(true);
-    if (S.sheet?.kind === 'settings') openSettings();
-  } catch (e) {
-    if (e && e.name !== 'NotFoundError') banner('Beltpack: ' + e.message, 'bad', 5000);
+  } else {
+    S.audio.setTap(false);
+    S.audio.onMix = null;
+    if (S.beltEnc) { try { S.beltEnc.close(); } catch {} S.beltEnc = null; }
+    S.audio.setMonitor(true);
   }
+  updateTransmit();
 }
 
 function onBeltEvent(e) {
@@ -447,6 +479,32 @@ function syncBelt(force = false) {
   }
 }
 
+// ---------------- headphone button as talk toggle ----------------
+// Media keys only reach a page that is "playing" media, so a silent stream is
+// played through an <audio> element and play/pause actions toggle latch-talk.
+function setupMediaPTT() {
+  const on = store.get('mediaPTT', false);
+  if (!('mediaSession' in navigator) || !S.audio) return;
+  if (!on) {
+    for (const a of ['play', 'pause', 'stop']) try { navigator.mediaSession.setActionHandler(a, null); } catch {}
+    if (S.mediaEl) { S.mediaEl.pause(); S.mediaEl = null; }
+    return;
+  }
+  if (!S.mediaEl) {
+    const dest = S.audio.ctx.createMediaStreamDestination();
+    const g = S.audio.ctx.createGain(); g.gain.value = 0; g.connect(dest);
+    S.mediaEl = new Audio(); S.mediaEl.srcObject = dest.stream; S.mediaEl.play().catch(() => {});
+  }
+  navigator.mediaSession.metadata = new MediaMetadata({ title: 'OpenLine intercom', artist: S.welcome?.user || '' });
+  const toggle = () => {
+    if (S.talk.size > 0) { S.latched = false; setTalkTargets(false); }
+    else if (S.targets.size && !S.muted) { S.latched = true; setTalkTargets(true); }
+    navigator.mediaSession.playbackState = 'playing';
+  };
+  for (const a of ['play', 'pause', 'stop']) try { navigator.mediaSession.setActionHandler(a, toggle); } catch {}
+  navigator.mediaSession.playbackState = 'playing';
+}
+
 // ---------------- startup ----------------
 async function ensureAudio() {
   if (S.audio) return;
@@ -463,6 +521,7 @@ async function ensureAudio() {
     S.audio = a;
     updateTransmit();
     wakeLock();
+    setupMediaPTT();
   })();
   try { await S.audioStarting; } finally { S.audioStarting = null; }
 }
