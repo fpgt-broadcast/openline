@@ -83,12 +83,22 @@ func RunVMixTally(ctx context.Context, server string, vc VMixConfig, lg *log.Log
 		backoff, lostAt = time.Second, time.Time{}
 		lg.Printf("[vmix] connected to %s", addr)
 		go func() { <-ctx.Done(); conn.Close() }()
-		fmt.Fprintf(conn, "SUBSCRIBE TALLY\r\n")
+		// Subscribe to changes, and ask for the current state right away
+		// (vMix only pushes on the next change otherwise).
+		fmt.Fprintf(conn, "SUBSCRIBE TALLY\r\nTALLY\r\n")
 		sc := bufio.NewScanner(conn)
+		lastLine := ""
 		for sc.Scan() {
-			if pgm, pvw, ok := ParseVMixTally(sc.Text()); ok {
+			line := strings.TrimSpace(sc.Text())
+			if pgm, pvw, ok := ParseVMixTally(line); ok {
+				if line != lastLine {
+					lg.Printf("[vmix] tally: on air %v, preview %v", pgm, pvw)
+					lastLine = line
+				}
 				publish(proto.TallyUpdate{T: "tally", Program: pgm, Preview: pvw})
 				cleared = false
+			} else if strings.Contains(line, " ER") {
+				lg.Printf("[vmix] vMix replied: %s", line)
 			}
 		}
 		conn.Close()
@@ -104,7 +114,7 @@ func tallyServerLoop(ctx context.Context, server, token string, latest <-chan pr
 	for ctx.Err() == nil {
 		cl, err := client.Dial(ctx, server, proto.Msg{Token: token, Client: "bridge-tally"})
 		if err != nil {
-			lg.Printf("[vmix] server: %v", err)
+			lg.Printf("[vmix] cannot send tally to the server: %v (check \"server\" and the vmix \"token\" in bridge.json)", err)
 			select {
 			case <-time.After(3 * time.Second):
 				continue
@@ -112,7 +122,13 @@ func tallyServerLoop(ctx context.Context, server, token string, latest <-chan pr
 				return
 			}
 		}
+		lg.Printf("[vmix] sending tally to the server as user %q", cl.Welcome().User)
 		rctx, cancel := context.WithCancel(ctx)
+		cl.OnControl = func(t string, raw []byte) {
+			if t == "error" {
+				lg.Printf("[vmix] server says: %s", raw)
+			}
+		}
 		go func() { cl.Run(rctx); cancel() }()
 		if last != nil {
 			cl.Send(*last)

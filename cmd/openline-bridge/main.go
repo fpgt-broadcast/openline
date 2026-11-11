@@ -97,7 +97,11 @@ func main() {
 	}
 	if needNDI {
 		if err := ndi.Load(); err != nil {
-			log.Fatal(err)
+			if cfg.VMix == nil {
+				log.Fatal(err)
+			}
+			// Keep vMix tally running even when NDI isn't installed yet.
+			log.Printf("WARNING: %v\nNDI links will keep retrying; vMix tally still runs.", err)
 		}
 	}
 

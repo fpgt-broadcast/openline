@@ -404,6 +404,8 @@ func (h *Hub) setTally(from *Session, t proto.TallyUpdate) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if !from.user.Bridge {
+		log.Printf("tally from %q ignored: give that user the \"NDI bridge\" role", from.user.Name)
+		from.sendJSON(proto.Msg{T: "error", Msg: "tally ignored: user " + from.user.Name + " needs the NDI bridge role"})
 		return
 	}
 	h.tallyPgm, h.tallyPvw = map[int]bool{}, map[int]bool{}
