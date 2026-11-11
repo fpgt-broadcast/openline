@@ -4,6 +4,14 @@
 const SR = 48000;
 const FRAME = 960;
 
+// Browsers disable microphone + AudioWorklet + WebCodecs on plain http://
+// pages (except localhost). Explain that instead of failing obscurely.
+export function insecureMessage() {
+  if (window.isSecureContext) return null;
+  return `Audio needs a secure connection, but this page was opened over plain ${location.protocol}//${location.host}. ` +
+    'Open your https:// address instead (e.g. the Cloudflare hostname), or start the server with -self-signed for HTTPS on the local network.';
+}
+
 export function codecSupport() {
   return typeof AudioEncoder !== 'undefined' && typeof AudioDecoder !== 'undefined';
 }
@@ -23,6 +31,8 @@ export class AudioEngine {
   }
 
   async start({ micId, echoCancel = true } = {}) {
+    const insecure = insecureMessage();
+    if (insecure) throw new Error(insecure);
     if (!codecSupport()) throw new Error('This browser lacks WebCodecs audio (use current Chrome, Edge, Firefox or Safari 26+).');
     this.ctx = new AudioContext({ sampleRate: SR, latencyHint: 'interactive' });
     await this.ctx.audioWorklet.addModule('worklets.js');

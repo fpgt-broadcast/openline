@@ -1,6 +1,6 @@
 // OpenLine web client: login, channel list, PTT, detail + settings sheets,
 // and the Bluetooth beltpack bridge.
-import { AudioEngine, codecSupport } from './audio.js';
+import { AudioEngine, codecSupport, insecureMessage } from './audio.js';
 import { Beltpack, bleSupported } from './ble.js';
 
 const $ = (id) => document.getElementById(id);
@@ -550,7 +550,9 @@ function bindPress(el, down, up) {
 }
 
 function init() {
-  if (!codecSupport()) {
+  if (insecureMessage()) {
+    showLogin(insecureMessage());
+  } else if (!codecSupport()) {
     showLogin('This browser cannot encode Opus audio (WebCodecs). Use a current Chrome, Edge, Firefox or Safari 26+.');
   }
   fetch('api/info').then((r) => r.json()).then((i) => { $('loginTitle').textContent = i.server; }).catch(() => {});
