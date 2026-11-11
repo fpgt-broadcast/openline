@@ -31,6 +31,7 @@ const S = {
   ws: null, welcome: null, channels: [],
   state: new Map(),                 // ch id -> {talkers, calls, members}
   talk: new Set(), listen: new Set(), muted: false, tally: 'off',
+  tallyView: store.get('tallyView', false), serverTallyScreen: null,
   targets: new Set(store.get('targets', [])),
   vols: store.get('vols', {}),      // ch id -> 0..100
   listenPref: store.get('listenPref', {}),
@@ -89,6 +90,12 @@ function onControl(m) {
         const ch = chan(id);
         if (!ch || !ch.canTalk) S.targets.delete(id);
       }
+      // Admin's per-user "tally screen" default: apply when it changes (or on first connect).
+      if (S.serverTallyScreen !== !!m.tallyScreen) {
+        if (S.serverTallyScreen !== null || m.tallyScreen) setTallyView(!!m.tallyScreen);
+        S.serverTallyScreen = !!m.tallyScreen;
+      }
+      reportView();
       $('hUser').textContent = m.user;
       $('hServer').textContent = '· ' + m.server;
       document.title = m.server + ' · OpenLine';
@@ -120,6 +127,7 @@ function onControl(m) {
       break;
     case 'remote':
       if (m.op === 'vol') setVol(m.ch, m.v);
+      if (m.op === 'tallyscreen') setTallyView(!!m.on);
       if (m.op === 'identify') { document.body.classList.remove('flash'); void document.body.offsetWidth; document.body.classList.add('flash'); }
       break;
     case 'error':
@@ -233,7 +241,7 @@ function channelLevel(id) {
 }
 
 function renderAll() {
-  renderChannels(); renderPTT(); renderBanner();
+  renderChannels(); renderPTT(); renderBanner(); renderTallyView();
   if (S.sheet && S.sheet.kind === 'channel') renderChannelSheet(S.sheet.id);
   syncBelt();
 }
@@ -264,7 +272,43 @@ function renderChannels() {
   }));
 }
 
+function setTallyView(on) {
+  S.tallyView = on;
+  store.set('tallyView', on);
+  if (on) closeSheet();
+  reportView();
+  renderTallyView();
+}
+function reportView() { send({ t: 'view', on: !!S.tallyView }); }
+
+function renderTallyView() {
+  const v = $('tallyView');
+  if (!v) return;
+  v.classList.toggle('hidden', !S.tallyView);
+  if (!S.tallyView) return;
+  const t = S.tally;
+  v.classList.remove('off', 'program', 'preview');
+  v.classList.add(t === 'program' || t === 'preview' ? t : 'off');
+  $('tvState').textContent = t === 'program' ? 'ON AIR' : t === 'preview' ? 'PREVIEW' : 'OFF';
+  $('tvUser').textContent = S.welcome ? S.welcome.user : '';
+  $('tvDot').className = $('hDot').className;
+  // who is talking to me right now
+  const me = S.welcome && S.welcome.sid, names = new Set();
+  for (const ch of S.channels) {
+    const st = S.state.get(ch.id);
+    if (st && S.listen.has(ch.id)) for (const tk of st.talkers) if (tk.sid !== me && !ch.program) names.add(tk.name);
+  }
+  $('tvAct').textContent = names.size ? [...names].join(', ') + ' talking' : '';
+  const btn = $('tvPtt'), live = S.talk.size > 0;
+  btn.classList.toggle('live', live);
+  btn.disabled = S.muted || (S.targets.size === 0 && !live);
+  const targets = [...S.targets].map((id) => chan(id)?.name).filter(Boolean);
+  btn.querySelector('.big').textContent = S.muted ? 'MIC MUTED' : live ? (S.latched ? 'TALKING · LATCHED' : 'TALKING') : 'HOLD TO TALK';
+  $('tvPttSub').textContent = S.muted ? 'muted by admin' : targets.length ? 'to ' + targets.join(' + ') : 'Exit and pick channels to talk to';
+}
+
 function renderTally() {
+  renderTallyView();
   const el = $('tally');
   const t = S.tally;
   el.className = 'tally ' + t + (t === 'off' ? ' hidden' : '');
@@ -382,7 +426,8 @@ async function openSettings() {
         [[40, 'Low latency (good networks)'], [60, 'Normal'], [120, 'Safe (bad cellular / Wi‑Fi)']].map(([v, t]) => h('option', { value: v, selected: store.get('jitter', 60) === v }, t))),
       h('h3', {}, 'Beltpack (Bluetooth)'),
       beltSection(),
-      h('button', { style: { marginTop: '12px', width: '100%' }, onclick: () => { closeSheet(); openGuide(0); } }, 'Show quick start guide'),
+      h('button', { style: { marginTop: '12px', width: '100%' }, onclick: () => { closeSheet(); setTallyView(true); } }, 'Full-screen tally view'),
+      h('button', { style: { marginTop: '8px', width: '100%' }, onclick: () => { closeSheet(); openGuide(0); } }, 'Show quick start guide'),
       h('h3', {}, 'Headphone button'),
       h('label', {}, h('input', { type: 'checkbox', checked: store.get('mediaPTT', false), onchange: (e) => { store.set('mediaPTT', e.target.checked); setupMediaPTT(); } }),
         ' Headphone play/pause button toggles talk (AirPods stem press, headset button). Experimental — depends on browser/OS.'),
@@ -579,7 +624,7 @@ function showLogin(err = '') { show('login'); $('loginErr').textContent = err; }
 function showStart() { show('start'); $('startInfo').textContent = `Signed in as ${S.welcome.user} on ${S.welcome.server}.`; }
 function showApp() {
   show('app');
-  if (!store.get('guideDone', false)) setTimeout(() => openGuide(), 400);
+  if (!store.get('guideDone', false) && !S.tallyView) setTimeout(() => openGuide(), 400);
 }
 
 // ---------------- quick start guide (first run on each device) ----------------
@@ -660,6 +705,8 @@ function init() {
   $('menuBtn').addEventListener('click', openSettings);
   $('clearBtn').addEventListener('click', () => { if (S.talk.size) setTalkTargets(false); S.targets.clear(); store.set('targets', []); renderAll(); });
   bindPress($('ptt'), pttDown, pttUp);
+  bindPress($('tvPtt'), pttDown, pttUp);
+  $('tvExit').addEventListener('click', () => setTallyView(false));
   bindPress($('callBtn'), () => setCall(true), () => setCall(false));
 
   document.addEventListener('keydown', (e) => {

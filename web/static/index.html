@@ -43,6 +43,16 @@
     <button class="ghost" id="menuBtn" aria-label="Settings">Menu</button>
   </header>
   <div id="tally" class="tally hidden" role="status"></div>
+  <div id="tallyView" class="tview off hidden" role="region" aria-label="Tally">
+    <div class="tv-top">
+      <span id="tvUser" class="tv-user"></span>
+      <span class="dot" id="tvDot"></span>
+      <button id="tvExit" class="tv-exit">Exit</button>
+    </div>
+    <div class="tv-state" id="tvState" role="status" aria-live="polite">OFF</div>
+    <div class="tv-act" id="tvAct"></div>
+    <button id="tvPtt" class="tv-ptt"><span class="big">HOLD TO TALK</span><span class="sub" id="tvPttSub"></span></button>
+  </div>
   <div id="banner" class="banner hidden"></div>
   <div class="colhead"><span>TALK TO</span><span class="grow">CHANNEL</span><span>LISTEN</span></div>
   <div id="channels"></div>

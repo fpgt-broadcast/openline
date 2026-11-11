@@ -45,6 +45,8 @@ type User struct {
 	// Tally lists the vMix input numbers this user is (e.g. a camera op on
 	// input 2). The user's devices show LIVE/PREVIEW from those inputs.
 	Tally []int `json:"tally,omitempty"`
+	// TallyScreen starts this user's app in the full-screen tally view.
+	TallyScreen bool `json:"tallyScreen,omitempty"`
 }
 
 // NetConfig is a beltpack's network setup, pushed to the device by the admin.

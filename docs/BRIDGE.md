@@ -87,6 +87,8 @@ The bridge can read tally from vMix and show each person whether their camera is
 
    The bridge PC must be able to reach the vMix PC on TCP **8099** (vMix's TCP API, always on). A bridge can run with only a `vmix` section and no NDI links; then neither NDI nor libopus is needed.
 
+**Full-screen tally view:** for a phone mounted on a camera, the whole screen turns red (ON AIR) or green (PREVIEW), with a big talk button kept at the bottom (tap = latch, hold = talk to the person's selected channels). Turn it on from the app (**Menu → Full-screen tally view**), for one person live (**Admin → Live → Tally screen**), or as a default for a user (**Admin → Users → tally screen**). **Exit** returns to the normal view.
+
 The bridge subscribes with `SUBSCRIBE TALLY`, so changes arrive instantly. If vMix becomes unreachable for more than 5 s, tally is cleared so nobody keeps a stale ON AIR light.
 
 ## Config reference

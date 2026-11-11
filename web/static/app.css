@@ -139,3 +139,25 @@ body.tally-preview #app { box-shadow: inset 0 0 0 3px var(--ok); }
 .guide .steps i { width: 7px; height: 7px; border-radius: 4px; background: var(--line2); }
 .guide .steps i.on { background: var(--text); }
 .guide-focus { outline: 3px solid var(--link) !important; outline-offset: 3px; position: relative; z-index: 15; }
+
+/* ---------- full-screen tally view ---------- */
+.tview { position: fixed; inset: 0; z-index: 12; display: flex; flex-direction: column; padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
+  gap: 10px; transition: background-color 80ms linear; }
+.tview.off { background: #101215; color: var(--muted); }
+.tview.program { background: #e5484d; color: #160809; }
+.tview.preview { background: #30a46c; color: #06140c; }
+.tv-top { display: flex; align-items: center; gap: 10px; }
+.tv-user { flex: 1; font-weight: 700; font-size: 16px; }
+.tv-exit { background: rgba(0,0,0,.25); border-color: rgba(0,0,0,.35); color: inherit; }
+.tview.off .tv-exit { background: var(--panel2); border-color: var(--line2); color: var(--text); }
+.tv-state { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center;
+  font-size: min(16vw, 22vh, 150px); font-weight: 900; letter-spacing: 1px; line-height: 1; white-space: nowrap; }
+.tview.off .tv-state { font-size: min(12vw, 64px); color: #4a515c; }
+.tv-act { min-height: 22px; text-align: center; font-size: 16px; font-weight: 700; }
+.tv-ptt { height: max(22vh, 150px); border-radius: 18px; border: 3px solid rgba(0,0,0,.35); background: rgba(0,0,0,.28); color: #fff;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+.tview.off .tv-ptt { background: #1b1f25; border-color: var(--line2); color: var(--text); }
+.tv-ptt .big { font-size: 26px; font-weight: 800; letter-spacing: 1px; }
+.tv-ptt .sub { font-size: 14px; font-weight: 500; opacity: .85; }
+.tv-ptt.live { background: #fff; color: #160809; border-color: #fff; }
+.tv-ptt:disabled { opacity: .55; }
