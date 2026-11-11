@@ -28,6 +28,7 @@ type Config struct {
 	Server   string       `json:"server"`      // https://intercom.example.com
 	ExtraIPs string       `json:"ndiExtraIPs"` // optional NDI discovery IPs for routed networks
 	Links    []LinkConfig `json:"links"`
+	VMix     *VMixConfig  `json:"vmix,omitempty"` // optional: tally from vMix
 }
 
 type LinkConfig struct {
@@ -67,6 +68,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if c.Server == "" {
 		return nil, errors.New("config: server is required")
+	}
+	if c.VMix != nil && (c.VMix.Host == "" || c.VMix.Token == "") {
+		return nil, errors.New("config: vmix needs host and token")
 	}
 	for i, l := range c.Links {
 		if l.Token == "" {

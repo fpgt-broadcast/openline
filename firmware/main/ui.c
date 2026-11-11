@@ -283,6 +283,8 @@ static void render(void)
     for (char *p = name; *p; p++) if (*p >= 'a' && *p <= 'z') *p -= 32;
     disp_text(1, 0, name, true, true);
     const char *mode = g_cfg.mode == MODE_WIFI ? "WIFI" : g_cfg.mode == MODE_ETH ? "ETH" : "BT";
+    if (g_ui.tally == 1) mode = "LIVE"; // vMix tally replaces the link label
+    else if (g_ui.tally == 2) mode = "PVW";
     char m2[8];
     snprintf(m2, sizeof(m2), "%s", mode);
     // right side: mode on line 1, battery on line 2 (small font, drawn inverted on bar)
@@ -355,6 +357,10 @@ static void render(void)
         disp_fill(x, y, w, 20, false);
         disp_rect(x, y, w, 20, true);
         disp_text(x + 4, y + 2, ov, true, false);
+    }
+    if (g_ui.tally == 1) { // on air: double frame around the whole screen
+        disp_rect(0, 0, W, H, true);
+        disp_rect(1, 1, W - 2, H - 2, true);
     }
     if (t < g_ui.identify_until_us && blink) disp_invert_all();
     disp_flush();

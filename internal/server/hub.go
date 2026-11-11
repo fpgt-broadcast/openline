@@ -39,6 +39,7 @@ type Session struct {
 	listen    map[int]bool
 	call      map[int]bool
 	muted     bool
+	tally     string // program | preview | off
 	lastRx    time.Time
 	telemetry *proto.Telemetry
 	telemAt   time.Time
@@ -57,10 +58,12 @@ type Hub struct {
 	mu       sync.RWMutex
 	sessions map[uint16]*Session
 	nextSID  uint16
+
+	tallyPgm, tallyPvw map[int]bool // switcher inputs on program / preview
 }
 
 func NewHub(store *Store) *Hub {
-	return &Hub{store: store, sessions: map[uint16]*Session{}}
+	return &Hub{store: store, sessions: map[uint16]*Session{}, tallyPgm: map[int]bool{}, tallyPvw: map[int]bool{}}
 }
 
 var ErrAuth = errors.New("login failed")
@@ -162,6 +165,10 @@ func (h *Hub) Join(u User, hello proto.Msg, remote string) *Session {
 	if dev != nil {
 		s.sendJSON(settingsMsg(dev))
 	}
+	h.mu.Lock()
+	s.tally = ""
+	h.updateTallyLocked(s)
+	h.mu.Unlock()
 	h.broadcastState()
 	return s
 }
@@ -302,6 +309,11 @@ func (s *Session) HandleControl(m proto.Msg, raw []byte) {
 			s.telemAt = time.Now()
 			s.hub.mu.Unlock()
 		}
+	case "tally":
+		var t proto.TallyUpdate
+		if json.Unmarshal(raw, &t) == nil {
+			s.hub.setTally(s, t)
+		}
 	case "talk", "listen", "call":
 		on := m.On != nil && *m.On
 		if err := s.hub.setState(s, m.T, m.Ch, on, false); err != nil {
@@ -386,6 +398,43 @@ func (s *Session) HandleAudio(seq uint16, opus []byte) {
 	}
 }
 
+// setTally stores the switcher tally (only bridge users may publish it) and
+// pushes each session its own LIVE / PREVIEW / off state when it changes.
+func (h *Hub) setTally(from *Session, t proto.TallyUpdate) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !from.user.Bridge {
+		return
+	}
+	h.tallyPgm, h.tallyPvw = map[int]bool{}, map[int]bool{}
+	for _, n := range t.Program {
+		h.tallyPgm[n] = true
+	}
+	for _, n := range t.Preview {
+		h.tallyPvw[n] = true
+	}
+	for _, s := range h.sessions {
+		h.updateTallyLocked(s)
+	}
+}
+
+func (h *Hub) updateTallyLocked(s *Session) {
+	state := "off"
+	for _, n := range s.user.Tally {
+		if h.tallyPgm[n] {
+			state = "program"
+			break
+		}
+		if h.tallyPvw[n] {
+			state = "preview"
+		}
+	}
+	if state != s.tally {
+		s.tally = state
+		s.sendJSON(proto.Tally{T: "tally", State: state})
+	}
+}
+
 // broadcastState sends channel activity to every session.
 func (h *Hub) broadcastState() {
 	h.mu.RLock()
@@ -449,6 +498,7 @@ func (h *Hub) ConfigChanged() {
 			continue
 		}
 		s.applyUserLocked(u, &cfg)
+		h.updateTallyLocked(s)
 		keep = append(keep, s)
 	}
 	h.mu.Unlock()
@@ -478,6 +528,7 @@ type SessionInfo struct {
 	Listen    []int            `json:"listen"`
 	Call      []int            `json:"call"`
 	Muted     bool             `json:"muted"`
+	Tally     string           `json:"tally"`
 	Sending   bool             `json:"sending"`
 	Telemetry *proto.Telemetry `json:"telemetry,omitempty"`
 }
@@ -501,7 +552,7 @@ func (s *Session) infoLocked() SessionInfo {
 	return SessionInfo{
 		SID: s.SID, User: s.user.Name, UserID: s.user.ID, Client: s.Client, Remote: s.Remote,
 		Device: s.DeviceID, Connected: s.Connected, Channels: chs,
-		Talk: keys(s.talk), Listen: keys(s.listen), Call: keys(s.call), Muted: s.muted,
+		Talk: keys(s.talk), Listen: keys(s.listen), Call: keys(s.call), Muted: s.muted, Tally: s.tally,
 		Sending:   len(s.talk) > 0 && time.Since(s.lastRx) < 500*time.Millisecond,
 		Telemetry: s.telemetry,
 	}

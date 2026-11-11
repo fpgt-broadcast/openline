@@ -43,7 +43,8 @@ const example = `{
       "in":  { "type": "ndi", "source": "BOOTH-PC (Talkback)", "channels": [0], "gateDb": -45 },
       "out": { "type": "ndi", "name": "OpenLine IFB Announcers" }
     }
-  ]
+  ],
+  "vmix": { "host": "192.168.1.20", "port": 8099, "token": "PASTE token of any NDI-bridge user (e.g. Program Feed)" }
 }
 `
 
@@ -80,8 +81,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("%v\n(create one with: openline-bridge -init > bridge.json)", err)
 	}
-	if err := opus.Load(); err != nil {
-		log.Fatal(err)
+	if len(cfg.Links) == 0 && cfg.VMix == nil {
+		log.Fatal("config has no links and no vmix section")
+	}
+	if len(cfg.Links) > 0 {
+		if err := opus.Load(); err != nil {
+			log.Fatal(err)
+		}
 	}
 	needNDI := false
 	for _, l := range cfg.Links {
@@ -100,6 +106,10 @@ func main() {
 	lg := log.New(os.Stderr, "", log.LstdFlags)
 	lg.Printf("OpenLine bridge %s → %s (%d links)", version, cfg.Server, len(cfg.Links))
 	var wg sync.WaitGroup
+	if cfg.VMix != nil {
+		wg.Add(1)
+		go func() { defer wg.Done(); bridge.RunVMixTally(ctx, cfg.Server, *cfg.VMix, lg) }()
+	}
 	for _, lc := range cfg.Links {
 		wg.Add(1)
 		go func() {

@@ -197,3 +197,17 @@ type Self struct {
 	Listen []int  `json:"listen"`
 	Muted  bool   `json:"muted"` // mic muted by admin
 }
+
+// TallyUpdate is sent by a bridge (role "NDI bridge") with the switcher's
+// current program and preview inputs (vMix input numbers).
+type TallyUpdate struct {
+	T       string `json:"t"` // "tally"
+	Program []int  `json:"program"`
+	Preview []int  `json:"preview"`
+}
+
+// Tally tells a client its own on-air state: "program", "preview" or "off".
+type Tally struct {
+	T     string `json:"t"` // "tally"
+	State string `json:"state"`
+}

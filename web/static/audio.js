@@ -94,6 +94,7 @@ export class AudioEngine {
         autoGainControl: true,
       },
     });
+    // iOS ends the mic track when the page is backgrounded; the app re-opens it on return.
     this.micSrc = this.ctx.createMediaStreamSource(this.micStream);
     this.micSrc.connect(this.capture);
   }

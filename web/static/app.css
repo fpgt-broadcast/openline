@@ -120,3 +120,22 @@ td button { min-height: 32px; padding: 0 8px; font-size: 12px; }
 .key button.talk.on { background: var(--bad); color: #160809; border-color: var(--bad); }
 details summary { cursor: pointer; color: var(--muted); font-size: 12px; padding: 4px 0; }
 .qr { width: 200px; height: 200px; background: #fff; border-radius: 8px; }
+
+/* ---------- tally (vMix) ---------- */
+.tally { padding: 6px 12px; font-weight: 800; letter-spacing: 2px; text-align: center; font-size: 15px; }
+.tally.program { background: var(--bad); color: #160809; }
+.tally.preview { background: var(--ok); color: #06140c; }
+body.tally-program #app { box-shadow: inset 0 0 0 5px var(--bad); }
+body.tally-preview #app { box-shadow: inset 0 0 0 3px var(--ok); }
+
+/* ---------- quick start guide ---------- */
+.guide-dim { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 14; pointer-events: none; }
+.guide { position: fixed; left: 12px; right: 12px; max-width: 520px; margin: 0 auto; z-index: 20; background: var(--panel2);
+  border: 1px solid var(--line2); border-radius: 12px; padding: 14px 16px; box-shadow: 0 12px 32px rgba(0,0,0,.6); }
+.guide.top { top: 64px; } .guide.bottom { bottom: calc(16px + env(safe-area-inset-bottom)); }
+.guide h2 { margin: 0 0 6px; font-size: 17px; }
+.guide p { margin: 0; color: #c9ced6; font-size: 14px; }
+.guide .steps { display: flex; gap: 5px; margin: 12px 0 10px; }
+.guide .steps i { width: 7px; height: 7px; border-radius: 4px; background: var(--line2); }
+.guide .steps i.on { background: var(--text); }
+.guide-focus { outline: 3px solid var(--link) !important; outline-offset: 3px; position: relative; z-index: 15; }

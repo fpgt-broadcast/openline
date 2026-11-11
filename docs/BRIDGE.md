@@ -74,6 +74,21 @@ When a link has both, the announcers never hear their own voice echoed back. The
 
 **Result:** the director selects *Announcers* and holds PTT, and the announcers hear them in their IFB. When an announcer presses their talkback (or just speaks into the talkback mic, past the gate), the director hears them on the *Announcers* channel. Program plays to everyone and dips 12 dB whenever someone talks.
 
+## vMix tally
+
+The bridge can read tally from vMix and show each person whether their camera is **ON AIR** or in **PREVIEW**. The app shows a red ON AIR bar and frame (green for preview), the beltpack shows `LIVE`/`PVW` with a frame on the screen, and the admin Live tab shows it too.
+
+1. **Admin → Users → Edit** a camera operator. Under *vMix tally inputs*, enter their vMix input number(s), e.g. `2`.
+2. Add to `bridge.json` (any user with the NDI bridge role can send tally):
+
+   ```json
+   "vmix": { "host": "192.168.1.20", "port": 8099, "token": "<Program Feed token>" }
+   ```
+
+   The bridge PC must be able to reach the vMix PC on TCP **8099** (vMix's TCP API, always on). A bridge can run with only a `vmix` section and no NDI links; then neither NDI nor libopus is needed.
+
+The bridge subscribes with `SUBSCRIBE TALLY`, so changes arrive instantly. If vMix becomes unreachable for more than 5 s, tally is cleared so nobody keeps a stale ON AIR light.
+
 ## Config reference
 
 | Field | Meaning |
@@ -92,6 +107,8 @@ When a link has both, the announcers never hear their own voice echoed back. The
 | `out.type` | `ndi`, or `null` (testing) |
 | `out.name` | Name of the NDI source the bridge publishes |
 | `out.gainDb` | Output trim |
+| `vmix.host` / `vmix.port` | vMix PC and TCP API port (default 8099) |
+| `vmix.token` | Token of an NDI-bridge user, used to publish tally |
 
 ## Latency
 
