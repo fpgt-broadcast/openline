@@ -41,6 +41,7 @@ type Session struct {
 	muted     bool
 	tally     string // program | preview | off
 	tallyView bool   // client reports it is showing the full-screen tally view
+	devPerson string // name the device entered for itself ("" = use the user's Person)
 	lastRx    time.Time
 	telemetry *proto.Telemetry
 	telemAt   time.Time
@@ -112,6 +113,7 @@ func (h *Hub) Join(u User, hello proto.Msg, remote string) *Session {
 		Client:    client,
 		Remote:    remote,
 		DeviceID:  normDeviceID(hello.Device),
+		devPerson: cleanPerson(hello.Name),
 		Connected: time.Now(),
 		hub:       h,
 		out:       make(chan outFrame, 512),
@@ -172,6 +174,14 @@ func (h *Hub) Join(u User, hello proto.Msg, remote string) *Session {
 	h.mu.Unlock()
 	h.broadcastState()
 	return s
+}
+
+// personLocked is the name shown for the person behind this session.
+func (s *Session) personLocked() string {
+	if s.devPerson != "" {
+		return s.devPerson
+	}
+	return s.user.Person
 }
 
 func settingsMsg(d *Device) proto.Settings {
@@ -274,6 +284,7 @@ func (s *Session) sendWelcome() {
 		SID:         s.SID,
 		Server:      cfg.ServerName,
 		User:        s.user.Name,
+		Person:      s.personLocked(),
 		Admin:       s.user.Admin,
 		Talk:        keys(s.talk),
 		Listen:      keys(s.listen),
@@ -311,6 +322,12 @@ func (s *Session) HandleControl(m proto.Msg, raw []byte) {
 			s.telemAt = time.Now()
 			s.hub.mu.Unlock()
 		}
+	case "name":
+		s.hub.mu.Lock()
+		s.devPerson = cleanPerson(m.Name)
+		s.hub.mu.Unlock()
+		s.sendWelcome()
+		s.hub.broadcastState()
 	case "view":
 		s.hub.mu.Lock()
 		s.tallyView = m.On != nil && *m.On
@@ -464,7 +481,7 @@ func (h *Hub) broadcastState() {
 	sort.Ints(sids)
 	for _, sid := range sids {
 		s := h.sessions[uint16(sid)]
-		t := proto.Talker{SID: s.SID, Name: s.user.Name}
+		t := proto.Talker{SID: s.SID, Name: s.user.Name, Person: s.personLocked()}
 		for ch := range s.talk {
 			get(ch).talkers = append(get(ch).talkers, t)
 		}
@@ -526,6 +543,7 @@ func (h *Hub) ConfigChanged() {
 type SessionInfo struct {
 	SID       uint16           `json:"sid"`
 	User      string           `json:"user"`
+	Person    string           `json:"person,omitempty"`
 	UserID    string           `json:"userId"`
 	Client    string           `json:"client"`
 	Remote    string           `json:"remote"`
@@ -559,7 +577,7 @@ func (s *Session) infoLocked() SessionInfo {
 		chs = append(chs, sl.ch.ID)
 	}
 	return SessionInfo{
-		SID: s.SID, User: s.user.Name, UserID: s.user.ID, Client: s.Client, Remote: s.Remote,
+		SID: s.SID, User: s.user.Name, Person: s.personLocked(), UserID: s.user.ID, Client: s.Client, Remote: s.Remote,
 		Device: s.DeviceID, Connected: s.Connected, Channels: chs,
 		Talk: keys(s.talk), Listen: keys(s.listen), Call: keys(s.call), Muted: s.muted, Tally: s.tally, TallyView: s.tallyView,
 		Sending:   len(s.talk) > 0 && time.Since(s.lastRx) < 500*time.Millisecond,

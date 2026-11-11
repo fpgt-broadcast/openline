@@ -45,6 +45,9 @@ type User struct {
 	// Tally lists the vMix input numbers this user is (e.g. a camera op on
 	// input 2). The user's devices show LIVE/PREVIEW from those inputs.
 	Tally []int `json:"tally,omitempty"`
+	// Person is who normally has this assignment ("John Doe"). A device can
+	// override it for its own session by entering a name.
+	Person string `json:"person,omitempty"`
 	// TallyScreen starts this user's app in the full-screen tally view.
 	TallyScreen bool `json:"tallyScreen,omitempty"`
 }
@@ -156,6 +159,7 @@ func (c *Config) Validate() error {
 	for i := range c.Users {
 		u := &c.Users[i]
 		u.Name = strings.TrimSpace(u.Name)
+		u.Person = cleanPerson(u.Person)
 		if u.Name == "" {
 			return errors.New("user name required")
 		}
@@ -228,6 +232,15 @@ func (c *Config) Validate() error {
 	}
 	c.Devices = devs
 	return nil
+}
+
+// cleanPerson trims a person name and caps it at 40 characters.
+func cleanPerson(n string) string {
+	n = strings.Join(strings.Fields(n), " ")
+	if r := []rune(n); len(r) > 40 {
+		n = string(r[:40])
+	}
+	return n
 }
 
 func clamp(v, lo, hi int) int {

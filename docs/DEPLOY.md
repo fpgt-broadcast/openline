@@ -65,7 +65,7 @@ This serves `https://<LAN-IP>:8999` with a self-signed certificate made for this
 2. Open `/admin.html`:
    - **Server**: set the public URL and change the admin password.
    - **Channels**: name them, set colours, and mark program feeds *listen-only + program* (they're dipped 12 dB automatically while anyone talks).
-   - **Users**: one per person or role. Choose channel access (*Talk + Listen*, *Listen*…) and order (= beltpack key order). Share the **invite link / QR**. Opening it signs the person in, with no typing.
+   - **Users**: one per assignment or role (e.g. *Camera 1*), with an optional **Person** (e.g. *John Doe*). People can also type their own name when they sign in; the admin Live tab shows both and has a search box. Choose channel access (*Talk + Listen*, *Listen*…) and order (= beltpack key order). Share the **invite link / QR**. Opening it signs the person in, with no typing.
 3. The demo config has Director/1111, Camera 1/2222 and A1/3333, plus the bridge users *Program Feed* and *Announcer Link*. Change or delete them.
 
 ## Connecting clients

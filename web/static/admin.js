@@ -50,8 +50,11 @@ const fmtAgo = (t) => { const s = Math.round((Date.now() - new Date(t)) / 1000);
 function remote(sid, op) { return api('POST', `sessions/${sid}/remote`, op).then(refresh); }
 
 function renderLive() {
-  const rows = A.sessions.map((s) => h('tr', {},
-    h('td', {}, h('b', {}, s.user), h('div', { class: 'small muted' }, `${s.client}${s.device ? ' · ' + s.device : ''}`)),
+  const q = (A.liveFilter || '').trim().toLowerCase();
+  const shown = A.sessions.filter((s) => !q || [s.user, s.person, s.device, s.remote].some((v) => (v || '').toLowerCase().includes(q)));
+  const rows = shown.map((s) => h('tr', {},
+    h('td', {}, h('b', {}, s.user), s.person ? h('div', {}, s.person) : null,
+      h('div', { class: 'small muted' }, `${s.client}${s.device ? ' · ' + s.device : ''}`)),
     h('td', { class: 'small muted' }, s.remote, h('br'), fmtAgo(s.connected)),
     h('td', {}, h('div', { class: 'row', style: { flexWrap: 'wrap', gap: '4px' } }, s.channels.map((id) => {
       const t = s.talk.includes(id), l = s.listen.includes(id);
@@ -68,11 +71,20 @@ function renderLive() {
       h('button', { onclick: run(() => remote(s.sid, { op: 'identify' })) }, 'Identify'),
       h('button', { onclick: run(async () => { if (confirm(`Disconnect ${s.user}?`)) await remote(s.sid, { op: 'kick' }); }) }, 'Kick'))),
   ));
-  $('tab-live').replaceChildren(
-    h('div', { class: 'small muted', style: { marginBottom: '8px' } }, `${A.sessions.length} connected · T/L force talk/listen per channel`),
-    h('div', { class: 'tablebox' }, h('table', {},
-      h('thead', {}, h('tr', {}, ['User', 'From', 'Channels', 'State', 'Control'].map((t) => h('th', {}, t)))),
-      h('tbody', {}, rows.length ? rows : h('tr', {}, h('td', { colspan: 5, class: 'muted' }, 'Nobody connected'))))));
+  // The search box is built once so typing isn't interrupted by the 2 s refresh.
+  const box = $('tab-live');
+  if (!box.querySelector('#liveFilter')) {
+    box.replaceChildren(
+      h('div', { class: 'row', style: { marginBottom: '8px', flexWrap: 'wrap' } },
+        h('input', { id: 'liveFilter', type: 'search', placeholder: 'Search name, assignment, device or IP…', 'aria-label': 'Search connected users',
+          style: { maxWidth: '360px' }, oninput: (e) => { A.liveFilter = e.target.value; renderLive(); } }),
+        h('span', { id: 'liveCount', class: 'small muted' })),
+      h('div', { id: 'liveTable' }));
+  }
+  $('liveCount').textContent = `${shown.length === A.sessions.length ? A.sessions.length : shown.length + ' of ' + A.sessions.length} connected · T/L force talk/listen per channel`;
+  $('liveTable').replaceChildren(h('div', { class: 'tablebox' }, h('table', {},
+    h('thead', {}, h('tr', {}, ['Assignment / person', 'From', 'Channels', 'State', 'Control'].map((t) => h('th', {}, t)))),
+    h('tbody', {}, rows.length ? rows : h('tr', {}, h('td', { colspan: 5, class: 'muted' }, q ? 'No match' : 'Nobody connected'))))));
 }
 
 // ---------------- Beltpacks ----------------
@@ -94,6 +106,7 @@ function devStats(d) {
     t ? h('span', { class: 'pill ' + (t.hs ? '' : 'warn') }, t.hs ? 'headset' : 'no headset') : null,
     t?.fw ? h('span', { class: 'pill' }, 'fw ' + t.fw) : null,
     t?.up ? h('span', { class: 'pill' }, 'up ' + fmtAgo(Date.now() - t.up * 1000)) : null,
+    d.session?.person ? h('span', { class: 'pill' }, d.session.person) : null,
     d.session?.muted ? h('span', { class: 'pill bad' }, 'MIC MUTED') : null,
   ];
 }
@@ -228,9 +241,11 @@ const accessLabel = (a) => a.talk && a.listen ? 'Talk+Listen' : a.talk ? 'Talk' 
 function renderUsers() {
   const users = A.cfg.users;
   const table = h('div', { class: 'tablebox' }, h('table', {},
-    h('thead', {}, h('tr', {}, ['Name', 'PIN', 'vMix tally', 'Role', 'Channels (key order)', ''].map((t) => h('th', {}, t)))),
+    h('thead', {}, h('tr', {}, ['Assignment', 'Person', 'PIN', 'vMix tally', 'Role', 'Channels (key order)', ''].map((t) => h('th', {}, t)))),
     h('tbody', {}, users.map((u) => h('tr', {},
       h('td', {}, h('input', { type: 'text', value: u.name, oninput: (e) => { u.name = e.target.value; setDirty(); } })),
+      h('td', {}, h('input', { type: 'text', value: u.person || '', placeholder: 'e.g. John Doe', maxlength: 40, 'aria-label': u.name + ' person name',
+        oninput: (e) => { u.person = e.target.value; setDirty(); } })),
       h('td', { style: { width: '90px' } }, h('input', { type: 'text', value: u.pin || '', placeholder: 'none', inputmode: 'numeric', oninput: (e) => { u.pin = e.target.value.trim(); setDirty(); } })),
       h('td', { style: { width: '90px' } }, h('input', { type: 'text', value: (u.tally || []).join(', '), placeholder: 'none', inputmode: 'numeric',
         title: 'vMix input number(s) this person is on, e.g. 2 or 2, 5', 'aria-label': u.name + ' vMix tally input',
@@ -247,7 +262,7 @@ function renderUsers() {
     )))));
   $('tab-users').replaceChildren(
     h('div', { class: 'row', style: { marginBottom: '8px' } },
-      h('div', { class: 'grow small muted' }, 'Each user is a login (a person, a beltpack role, or an NDI bridge link). Names are yours to choose. vMix tally = the vMix input number(s) that person is on. Channel order = beltpack key order.'),
+      h('div', { class: 'grow small muted' }, 'Each user is a login for an assignment (e.g. Camera 1), a beltpack role, or an NDI bridge link. Person = who normally has it; a device can enter its own name, which wins for that device. vMix tally = the vMix input number(s) that person is on. Channel order = beltpack key order.'),
       h('button', { onclick: () => { const u = { name: 'New user ' + (users.length + 1), pin: '', channels: [], token: '' }; users.push(u); A.editUser = u; setDirty(); renderUsers(); } }, 'Add user')),
     table, A.editUser ? userEditor(A.editUser) : null);
 }
