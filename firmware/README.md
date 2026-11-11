@@ -4,14 +4,23 @@ The target is ESP32-S3 (ESP32-S3-WROOM-1-N16R8), built with ESP-IDF **5.3 or 5.4
 
 ```bash
 . $IDF_PATH/export.sh
+git clone --depth 1 -b v1.5.2 https://github.com/xiph/opus components/opus/libopus   # once
 idf.py set-target esp32s3
 idf.py menuconfig     # OpenLine beltpack → display type (OLED / e-ink), Ethernet fitted
 idf.py build flash monitor
 ```
 
-Managed components (`main/idf_component.yml`) are fetched on the first build: `esp_websocket_client`, `led_strip`, and a libopus port (`78/esp-opus`). The code only uses the standard `<opus.h>` API, so if that component isn't available, any other libopus port for ESP-IDF works.
+`esp_websocket_client` and `led_strip` (v3) come from the ESP component registry on the first build. libopus is built from upstream source by `components/opus`.
 
-> This firmware has **not been compiled or tested on hardware yet**. Expect small API fixes on the first build, and verify the codec, display and e-ink with the bring-up checklist in the hardware README.
+**Building without access to the component registry:** clone the two components from GitHub, then turn the component manager off:
+
+```bash
+git clone --depth 1 -b websocket-v1.8.0 https://github.com/espressif/esp-protocols /opt/esp/extra/ep
+git clone --depth 1 https://github.com/espressif/idf-extra-components /opt/esp/extra/iec
+IDF_COMPONENT_MANAGER=0 idf.py -DEXTRA_COMPONENT_DIRS="/opt/esp/extra/iec/led_strip;/opt/esp/extra/ep/components/esp_websocket_client" build
+```
+
+> **Status:** compiles cleanly with ESP-IDF v5.3.2 (OLED + Ethernet and e-ink variants, no warnings; image ≈1.5 MB of the 3 MB app partition). It has **not been run on hardware yet**. Bring it up with the checklist in the hardware README.
 
 ## Modules
 
