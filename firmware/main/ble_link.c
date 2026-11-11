@@ -120,6 +120,7 @@ static void handle_ctrl(const char *json)
         g_ui.conn = ival(m, "on", 0) ? CONN_ONLINE : CONN_CONNECTING;
         snprintf(g_ui.status, sizeof(g_ui.status), "%s", g_ui.conn == CONN_ONLINE ? "" : "APP OFFLINE");
         g_ui.muted = ival(m, "m", 0);
+        g_ui.tally = ival(m, "tl", 0);
     } else if (t && !strcmp(t, "mode")) {
         s_audio_via_belt = ival(m, "audio", 1);
     } else if (t && !strcmp(t, "identify")) {

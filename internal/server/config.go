@@ -42,6 +42,9 @@ type User struct {
 	Admin    bool     `json:"admin,omitempty"` // can open the admin page with their PIN
 	Bridge   bool     `json:"bridge,omitempty"`
 	Channels []Access `json:"channels"`
+	// Tally lists the vMix input numbers this user is (e.g. a camera op on
+	// input 2). The user's devices show LIVE/PREVIEW from those inputs.
+	Tally []int `json:"tally,omitempty"`
 }
 
 // NetConfig is a beltpack's network setup, pushed to the device by the admin.

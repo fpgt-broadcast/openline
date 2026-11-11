@@ -78,6 +78,17 @@ This serves `https://<LAN-IP>:8999` with a self-signed certificate made for this
 | NDI program / announcers | Run `openline-bridge` on a computer at the venue. See [BRIDGE.md](BRIDGE.md). |
 | Hands-free talk | A USB foot pedal that sends Space, the keyboard (Space / 1–9 / C), or the headphone play/pause button (Menu → *Headphone button*). |
 
+## Phones in the background (iPhone)
+
+iOS suspends web pages that are swiped away or locked, and it turns their microphone off. A browser app can't keep talking or listening from the lock screen; only a native app with Apple's background-audio permission can (that's how Unity Intercom does it). What the web app does:
+
+- It keeps the screen awake while open (iOS 16.4+), so leave it in the foreground.
+- When you come back to it, it reconnects, restarts audio and re-opens the microphone straight away. If iOS insists on a tap, a banner asks for one.
+- For crew who must pocket the phone, use a beltpack in Wi‑Fi/Ethernet mode, which doesn't depend on the phone at all.
+- iPhone **Guided Access** (Settings → Accessibility) can lock the phone into the app for a show.
+
+Android Chrome keeps playing audio in the background as long as the page is playing sound, but may still pause the microphone.
+
 ## Latency
 
 These figures are mouth to ear, one person to another, over the internet.

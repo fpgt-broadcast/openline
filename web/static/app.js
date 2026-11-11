@@ -30,7 +30,7 @@ const store = {
 const S = {
   ws: null, welcome: null, channels: [],
   state: new Map(),                 // ch id -> {talkers, calls, members}
-  talk: new Set(), listen: new Set(), muted: false,
+  talk: new Set(), listen: new Set(), muted: false, tally: 'off',
   targets: new Set(store.get('targets', [])),
   vols: store.get('vols', {}),      // ch id -> 0..100
   listenPref: store.get('listenPref', {}),
@@ -66,7 +66,8 @@ function connect() {
       return;
     }
     banner('Disconnected — reconnecting…', 'warn');
-    setTimeout(connect, S.reconnectDelay);
+    clearTimeout(S.reconnectTimer);
+    S.reconnectTimer = setTimeout(connect, S.reconnectDelay);
     S.reconnectDelay = Math.min(S.reconnectDelay * 1.6, 10000);
   };
 }
@@ -107,6 +108,11 @@ function onControl(m) {
     case 'state':
       for (const c of m.channels) S.state.set(c.id, c);
       renderAll();
+      break;
+    case 'tally':
+      S.tally = m.state;
+      renderTally();
+      syncBelt();
       break;
     case 'pong':
       S.rtt = Math.round(performance.now() - m.ts);
@@ -258,6 +264,15 @@ function renderChannels() {
   }));
 }
 
+function renderTally() {
+  const el = $('tally');
+  const t = S.tally;
+  el.className = 'tally ' + t + (t === 'off' ? ' hidden' : '');
+  el.textContent = t === 'program' ? '● ON AIR' : t === 'preview' ? 'PREVIEW' : '';
+  document.body.classList.toggle('tally-program', t === 'program');
+  document.body.classList.toggle('tally-preview', t === 'preview');
+}
+
 function renderPTT() {
   const btn = $('ptt');
   const live = S.talk.size > 0;
@@ -367,6 +382,7 @@ async function openSettings() {
         [[40, 'Low latency (good networks)'], [60, 'Normal'], [120, 'Safe (bad cellular / Wi‑Fi)']].map(([v, t]) => h('option', { value: v, selected: store.get('jitter', 60) === v }, t))),
       h('h3', {}, 'Beltpack (Bluetooth)'),
       beltSection(),
+      h('button', { style: { marginTop: '12px', width: '100%' }, onclick: () => { closeSheet(); openGuide(0); } }, 'Show quick start guide'),
       h('h3', {}, 'Headphone button'),
       h('label', {}, h('input', { type: 'checkbox', checked: store.get('mediaPTT', false), onchange: (e) => { store.set('mediaPTT', e.target.checked); setupMediaPTT(); } }),
         ' Headphone play/pause button toggles talk (AirPods stem press, headset button). Experimental — depends on browser/OS.'),
@@ -462,7 +478,8 @@ function onBeltEvent(e) {
 function syncBelt(force = false) {
   if (!S.belt) return;
   const me = S.welcome?.sid;
-  const status = { t: 'st', u: S.welcome?.user || '', on: S.ws?.readyState === 1 ? 1 : 0, m: S.muted ? 1 : 0 };
+  const status = { t: 'st', u: S.welcome?.user || '', on: S.ws?.readyState === 1 ? 1 : 0, m: S.muted ? 1 : 0,
+    tl: S.tally === 'program' ? 1 : S.tally === 'preview' ? 2 : 0 };
   const sj = JSON.stringify(status);
   if (force || S.beltKeyCache.st !== sj) { S.beltKeyCache.st = sj; S.belt.sendCtrl(status); }
   for (let k = 0; k < 4; k++) {
@@ -529,12 +546,80 @@ async function ensureAudio() {
 async function wakeLock() {
   try { if ('wakeLock' in navigator) await navigator.wakeLock.request('screen'); } catch {}
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.audio) { wakeLock(); S.audio.ctx.resume(); } });
+// Coming back to the foreground (iOS suspends pages that are swiped away or
+// locked): reconnect at once, resume audio, and re-open the mic if iOS ended it.
+async function resumeAfterBackground() {
+  if (document.visibilityState !== 'visible' || !S.creds) return;
+  if (!S.ws || S.ws.readyState > 1) {
+    clearTimeout(S.reconnectTimer);
+    S.reconnectDelay = 1000;
+    connect();
+  }
+  if (!S.audio) return;
+  wakeLock();
+  try { if (S.audio.ctx.state !== 'running') await S.audio.ctx.resume(); } catch {}
+  const track = S.audio.micStream && S.audio.micStream.getAudioTracks()[0];
+  if (!S.belt && store.get('mic', '') !== 'none' && (!track || track.readyState === 'ended' || track.muted)) {
+    try { await S.audio.setMic(store.get('mic', ''), store.get('aec', true)); banner('Microphone restarted', 'warn', 2000); }
+    catch (e) { banner('Tap anywhere to re-enable the microphone', 'warn'); S.needMic = true; }
+  }
+}
+document.addEventListener('visibilitychange', resumeAfterBackground);
+window.addEventListener('pageshow', resumeAfterBackground);
+window.addEventListener('focus', resumeAfterBackground);
+// iOS may refuse to restart audio without a tap after an interruption (call, Siri…)
+document.addEventListener('pointerdown', () => {
+  if (!S.audio) return;
+  if (S.audio.ctx.state !== 'running') S.audio.ctx.resume().catch(() => {});
+  if (S.needMic) { S.needMic = false; resumeAfterBackground(); }
+}, true);
 
 function show(id) { for (const v of ['login', 'start', 'app']) $(v).classList.toggle('hidden', v !== id); }
 function showLogin(err = '') { show('login'); $('loginErr').textContent = err; }
 function showStart() { show('start'); $('startInfo').textContent = `Signed in as ${S.welcome.user} on ${S.welcome.server}.`; }
-function showApp() { show('app'); }
+function showApp() {
+  show('app');
+  if (!store.get('guideDone', false)) setTimeout(() => openGuide(), 400);
+}
+
+// ---------------- quick start guide (first run on each device) ----------------
+const GUIDE = [
+  { title: 'Pick who to talk to', sel: '.ch .tgt:not([disabled])', pos: 'bottom',
+    text: 'Tap the coloured square next to a channel. A ✓ means the big button talks to that channel. You can pick several.' },
+  { title: 'Talk', sel: '#ptt', pos: 'top',
+    text: 'Hold the big button to talk and let go to stop. Quick tap = stays on (latched); tap again to stop. On a keyboard, hold Space.' },
+  { title: 'Listen and volume', sel: '.ch .lsn', pos: 'bottom',
+    text: 'ON / OFF turns listening to a channel on or off. Tap a channel\'s name for its volume, a call button, and who is connected.' },
+  { title: 'Calls and tally', sel: '#callBtn', pos: 'top',
+    text: 'Hold CALL to flash the channels you talk to. A flashing yellow row means someone is calling you. A red ON AIR bar means your camera is live.' },
+  { title: 'Keep it connected', sel: '#menuBtn', pos: 'bottom',
+    text: 'Keep this app open with the screen on (it stays awake by itself). If you switch apps it reconnects when you come back. On iPhone: Share → Add to Home Screen. Menu has your mic, headphones, beltpack and this guide.' },
+];
+
+function openGuide(step = 0) {
+  closeGuide();
+  const g = GUIDE[step];
+  const target = document.querySelector(g.sel);
+  if (target) { target.classList.add('guide-focus'); target.scrollIntoView({ block: 'nearest' }); }
+  const last = step === GUIDE.length - 1;
+  const done = () => { store.set('guideDone', true); closeGuide(); };
+  document.body.append(
+    h('div', { class: 'guide-dim', id: 'guideDim' }),
+    h('div', { class: 'guide ' + g.pos, id: 'guide', role: 'dialog', 'aria-label': 'Quick start' },
+      h('h2', {}, g.title),
+      h('p', {}, g.text),
+      h('div', { class: 'steps', 'aria-hidden': 'true' }, GUIDE.map((_, i) => h('i', { class: i === step ? 'on' : '' }))),
+      h('div', { class: 'row' },
+        h('button', { class: 'ghost', onclick: done }, 'Skip'),
+        h('span', { class: 'grow' }),
+        step > 0 ? h('button', { class: 'ghost', onclick: () => openGuide(step - 1) }, 'Back') : null,
+        h('button', { onclick: () => (last ? done() : openGuide(step + 1)) }, last ? 'Done' : 'Next'))));
+}
+
+function closeGuide() {
+  for (const id of ['guide', 'guideDim']) $(id)?.remove();
+  document.querySelectorAll('.guide-focus').forEach((el) => el.classList.remove('guide-focus'));
+}
 
 function logout() {
   store.del('creds'); S.creds = null; S.everWelcomed = false;

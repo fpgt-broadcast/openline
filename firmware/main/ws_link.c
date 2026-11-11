@@ -196,6 +196,9 @@ static void handle_text(const char *txt)
             }
             g_ui.keys[k].call_in = call;
         }
+    } else if (!strcmp(t, "tally")) {
+        const char *st = cJSON_GetStringValue(cJSON_GetObjectItem(m, "state"));
+        g_ui.tally = st && !strcmp(st, "program") ? 1 : st && !strcmp(st, "preview") ? 2 : 0;
     } else if (!strcmp(t, "remote")) {
         const char *op = cJSON_GetStringValue(cJSON_GetObjectItem(m, "op"));
         if (op && !strcmp(op, "vol")) {

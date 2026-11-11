@@ -22,6 +22,7 @@ typedef struct {
     char status[24]; // short status line when offline ("NO WIFI", "UNASSIGNED")
     ui_conn_t conn;
     bool muted;     // mic muted by admin
+    int tally;      // 0 off, 1 program (on air), 2 preview — from vMix via the bridge
     bool bt_setup;  // BLE provisioning window open
     int selected;   // key the encoder acts on
     int64_t identify_until_us;
