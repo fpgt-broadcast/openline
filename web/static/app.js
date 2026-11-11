@@ -290,10 +290,28 @@ function setTallyView(on) {
 }
 function reportView() { send({ t: 'view', on: !!S.tallyView }); }
 
+// Safari (and Chrome on Android) tint their top/bottom bars from the page's
+// theme colour and background, and don't always re-sample when the page
+// changes. Set both explicitly; the meta tag is replaced, not edited, so
+// Safari notices the change.
+const CHROME = { program: '#e5484d', preview: '#30a46c', off: '#101215' };
+function setBrowserBars(color) {
+  if (S.barColor === color) return;
+  S.barColor = color;
+  document.documentElement.style.backgroundColor = color;
+  document.body.style.backgroundColor = color;
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.remove());
+  const m = document.createElement('meta');
+  m.name = 'theme-color';
+  m.content = color;
+  document.head.append(m);
+}
+
 function renderTallyView() {
   const v = $('tallyView');
   if (!v) return;
   v.classList.toggle('hidden', !S.tallyView);
+  setBrowserBars(S.tallyView ? (CHROME[S.tally] || CHROME.off) : CHROME.off);
   if (!S.tallyView) return;
   const t = S.tally;
   v.classList.remove('off', 'program', 'preview');
