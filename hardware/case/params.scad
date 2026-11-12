@@ -1,7 +1,8 @@
 // OpenLine beltpack, carrier-board prototype — rev D: the "Beltpack 3" mockup on
 // the TOP face. Looking down at it on your belt: the 2.42" screen at the far
 // edge, the 4 lit keys in a row under it, the volume knob at the end of the row.
-// XLR-4 + USB-C on the bottom, built-in 18650 lying across the bottom-back.
+// Bottom: XLR-4, USB-C for charging (also the dock) and the DevKit's USB-C for
+// flashing. Right side: Ethernet (RJ45). Built-in 18650 across the bottom-back.
 // Units mm. Case coordinates: x across (left → right, seen from the FRONT),
 // y front (0) → back/belt side (case_d), z bottom (0) → top.
 // The wearer looks down from the belt side, so for them x runs right → left.
@@ -46,6 +47,8 @@ cb_x     = [in_x0 + 2.6, in_x1 - 2.6];     // board edges, clear of the lid's sk
 cb_y     = [in_y0 + 2.6, in_y1 - 2.6];
 cb_posts = [[8, 10], [82, 10], [45, 59]];  // M2 screws hold the board to the lid
 cb_post_d = 3.8;
+led_off   = [0, 4.6];   // SK6812MINI-E (reverse mount, in a PCB cut-out) offset from each key centre:
+                        // beside the 6×6 switch, on the side without legs, still under the hollow cap
 oled_stack = 6.5;   // MEASURE: board top → OLED glass top
 
 // ---------- main carrier board (upright, parallel to the front) ----------
@@ -55,14 +58,27 @@ mb_z   = [3.0, 84];
 rail_w = 3.0;       // side-wall rails with a slot the board slides into
 mb_x   = [in_x0 + rail_w - 1.5, in_x1 - rail_w + 1.5];
 
-// ---------- bottom wall: USB-C + XLR-4 ----------
-usb_x     = 18.3;   // MEASURE: DevKit USB-C centre across the case (DevKit on the left seen from the front, USB at its bottom edge)
+// ---------- modules on the main board's back (case coords: [x0, x1], [z0, z1], depth y1) ----------
+// The main board is laid out around these; every number is MEASURE until the parts arrive.
+devkit  = [[6, 32],    [4, 67],  21];   // ESP32-S3-DevKitC-1 in 8.5 mm female header sockets, USB-C ports at the bottom
+chg_mod = [[34, 52],   [4.5, 29.5], 15]; // Type-C charge/boost module, 2.5 mm off the board, its USB-C pointing down
+codec   = [[35, 60.4], [38, 81], 20];   // SparkFun BOB-21250 WM8960 in header sockets, pin rows vertical
+eth_mod = [[62, 87],   [37, 60], 25];   // USR-ES1 W5500, pins soldered in, RJ45 facing the right wall
+
+// ---------- bottom wall: two USB-C + XLR-4 ----------
+usb_x     = 18.3;   // MEASURE: DevKit's "USB" port centre across the case (flashing + console)
 usb_y     = mb_y + mb_t + 8.5 + 1.6 + 1.6;   // MEASURE: depth of the port centre (header 8.5 + DevKit PCB + half the port)
 usb_mouth = 4.0;    // MEASURE: port opening's distance inside the case's bottom surface
 usb_cut   = [13.5, 7.5];
-xlr_c     = [60, 25];       // XLR-4 centre on the bottom face (its body stays in front of the battery)
+chg_x     = 43;     // MEASURE: charge module's USB-C centre across the case (charging, PoE splitter, dock)
+chg_y     = mb_y + mb_t + 2.5 + 1.6 + 1.6;   // MEASURE: 2.5 mm spacer + module PCB + half the port
+xlr_c     = [66, 25];       // XLR-4 centre on the bottom face (its body stays in front of the battery)
 xlr_hole_d = 24;            // MEASURE/verify against the NC4MD-L-1 datasheet (Neutrik D-series)
 xlr_screw  = [12, 9.5];     // half-spacing of the 2 diagonal M3 screws (24 × 19 mm pattern)
+
+// ---------- right wall: Ethernet ----------
+eth_jack  = [48.5, mb_y + mb_t + 2.5 + 1.6 + 13.3 / 2];   // RJ45 opening centre [z, y]: HR911105A face 16 × 13.3
+eth_cut   = [16.8, 14.0];   // [along z, along y]
 
 // ---------- front face ----------
 pwr_c    = [72, 78];        // mini slide switch on the main board's front: [x, z]

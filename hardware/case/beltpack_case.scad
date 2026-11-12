@@ -1,6 +1,7 @@
 // OpenLine beltpack case, rev D — the "Beltpack 3" mockup on the TOP face:
 // big 2.42" screen, 4 lit keys in a row under it, volume knob at the end of the row.
-// Parts:  body | lid | keycaps | clip | assembly     (see build.sh)
+// Parts:  body | lid | keycaps | clip | assembly | layout     (see build.sh)
+//  layout  — preview only: the body cut open from the back, showing the main board's modules.
 //  body    — print standing up, open top up. Bottom has XLR-4 + USB-C.
 //  lid     — print upside down (top face on the bed).
 //  keycaps — 4 caps; print top-down in translucent PETG/PLA so the LEDs glow through.
@@ -47,8 +48,15 @@ module body() {
         // main-board slots (board edges sit 1.5 mm into each rail)
         for (x0 = [in_x0 + rail_w - 1.5 - 0.2, in_x1 - rail_w - 0.1])
             translate([x0, mb_y - 0.15, in_z0]) cube([1.8, mb_t + 0.3, mb_z[1]]);
-        // bottom: USB-C (sized for the plug's overmould) and XLR-4 with its two screws
+        // bottom: two USB-C (sized for the plug's overmould) and XLR-4 with its two screws
         translate([usb_x, usb_y, -1]) linear_extrude(wall + 2) rrect(usb_cut, 2.5);
+        translate([chg_x, chg_y, -1]) linear_extrude(wall + 2) rrect(usb_cut, 2.5);
+        // labels beside the two USB-C ports, reading right for the wearer tipping the bottom up toward them
+        for (u = [[usb_x, usb_y, "USB"], [chg_x, chg_y, "CHG"]])
+            translate([u[0], u[1] + usb_cut[1] / 2 + 3.2, -0.01]) linear_extrude(0.6) mirror([1, 0, 0])
+                text(u[2], size = 3.2, halign = "center", valign = "center", font = "Liberation Sans:style=Bold");
+        // right wall: Ethernet jack
+        translate([in_x1 - 1, eth_jack[1], eth_jack[0]]) rotate([0, 90, 0]) linear_extrude(wall + 2) rrect([eth_cut[0], eth_cut[1]], 1);
         translate([xlr_c[0], xlr_c[1], -1]) {
             cylinder(d = xlr_hole_d, h = wall + 2);
             for (s = [[-xlr_screw[0], xlr_screw[1]], [xlr_screw[0], -xlr_screw[1]]]) translate(s) cylinder(d = 3.2, h = wall + 2);
@@ -60,7 +68,9 @@ module body() {
         // belt-clip heat-set inserts, pressed in from outside
         for (c = clip_holes) translate([c[0], case_d + 1, c[1]]) rotate([90, 0, 0]) cylinder(d = insert_d, h = insert_len + 1);
         // grip grooves on both sides
-        for (z = [26 : 8 : 82], x = [-0.01, case_w - 1]) translate([x, 10, z]) cube([1.01, case_d - 20, 2.2]);
+        for (z = [26 : 8 : 82], x = [-0.01, case_w - 1])
+            if (x < 1 || abs(z + 1.1 - eth_jack[0]) > eth_cut[0] / 2 + 3)   // skip around the Ethernet jack
+                translate([x, 10, z]) cube([1.01, case_d - 20, 2.2]);
         // name on the front face
         translate([case_w / 2, 0.6, 44]) rotate([90, 0, 0]) linear_extrude(1)
             text("OPENLINE", size = 6, halign = "center", valign = "center", spacing = 1.2, font = "Liberation Sans:style=Bold");
@@ -151,11 +161,31 @@ module belt_clip() {
     }
 }
 
+// ---------- modules (preview only) ----------
+module mod_box(m, c) {
+    color(c) translate([m[0][0], mb_y + mb_t, m[1][0]]) cube([m[0][1] - m[0][0], m[2] - mb_y - mb_t, m[1][1] - m[1][0]]);
+}
+module modules() {
+    color("#c9a640") translate([mb_x[0], mb_y, mb_z[0]]) cube([mb_x[1] - mb_x[0], mb_t, mb_z[1] - mb_z[0]]);   // main board
+    mod_box(devkit, "#2b2f8a");
+    mod_box(chg_mod, "#1b1b1b");
+    mod_box(codec, "#d0362b");
+    mod_box(eth_mod, "#2f8f4e");
+    color("#b8bcc2") translate([eth_mod[0][1] - 21.3, mb_y + mb_t + 4.1, eth_jack[0] - 8]) cube([21.3, 13.3, 16]);   // RJ45 body
+    color("#9aa0a6") translate([xlr_c[0], xlr_c[1], wall]) cylinder(d = 22, h = 30);                                   // XLR body
+    color("#e8e8e8") translate([pwr_c[0] - 4.3, mb_y - 3.5, pwr_c[1] - 2]) cube([8.6, 3.5, 4]);                        // slide switch (front side)
+}
+
 // ---------- output ----------
 if (part == "body") body();
 else if (part == "lid") translate([0, case_d, top_z + 1.6]) rotate([180, 0, 0]) lid();   // top face down
 else if (part == "keycaps") for (i = [0:3]) translate([i * 20, 0, 0]) keycap(i + 1);
 else if (part == "clip") belt_clip();
+else if (part == "layout") {
+    color("#363b42") difference() { body(); translate([-1, 32, -1]) cube([200, 100, 200]); }
+    modules();
+    color("#4a90d9", 0.8) translate([case_w / 2, (batt_y[0] + batt_y[1]) / 2, in_z0 + 10]) rotate([0, 90, 0]) cylinder(d = 18.5, h = 70, center = true);
+}
 else {
     color("#363b42") body();
     color("#2a2e34") translate([0, 0, 0.3]) lid();
@@ -163,7 +193,7 @@ else {
     color("#1d2024") translate([enc_c[0], enc_c[1], top_z + 0.8]) cylinder(d = 16, h = 14);   // knob (bought)
     color("#0e1013") translate([oled_c[0], oled_c[1], cb_top_z + oled_stack - 0.6]) linear_extrude(0.6) rrect(oled_win + [2, 2], 1);  // screen
     color("#c9a640") translate([cb_x[0], cb_y[0], cb_top_z - cb_t]) cube([cb_x[1] - cb_x[0], cb_y[1] - cb_y[0], cb_t]);
-    color("#c9a640") translate([mb_x[0], mb_y, mb_z[0]]) cube([mb_x[1] - mb_x[0], mb_t, mb_z[1] - mb_z[0]]);
+    modules();
     color("#4a90d9", 0.8) translate([case_w / 2, (batt_y[0] + batt_y[1]) / 2, in_z0 + 10]) rotate([0, 90, 0]) cylinder(d = 18.5, h = 70, center = true);
     cx = (clip_holes[0][0] + clip_holes[1][0]) / 2;
     color("#50565e") translate([cx - clip_w / 2, case_d + clip_t + clip_spacer, clip_holes[0][1] - clip_mount_len / 2])

@@ -1,5 +1,5 @@
 // OpenLine charging dock (rev D case). The beltpack stands upright and its
-// bottom USB-C port drops onto a USB-C plug held in the dock floor.
+// charging USB-C port ("CHG", the charge module's) drops onto a USB-C plug held in the dock floor.
 // Unplug the headset before docking (the XLR is on the bottom too).
 //   openscad -D bays=1 -o dock_1bay.stl dock.scad
 //   openscad -D bays=2 -o dock_2bay.stl dock.scad   (fits a 220 mm bed)
@@ -38,8 +38,8 @@ difference() {
             linear_extrude(0.01) case_foot(pocket_clear);
             translate([0, 0, 2.6]) linear_extrude(0.01) case_foot(pocket_clear + 2.5);
         }
-        translate([usb_x, usb_y, -1]) linear_extrude(floor_h + 2) rrect(plug_body, 2);
-        translate([usb_x - cable_d / 2, usb_y, -0.01]) cube([cable_d, dock_d, cable_d]);
+        translate([chg_x, chg_y, -1]) linear_extrude(floor_h + 2) rrect(plug_body, 2);
+        translate([chg_x - cable_d / 2, chg_y, -0.01]) cube([cable_d, dock_d, cable_d]);
         translate([case_w / 2, -side - pocket_clear + 0.6, floor_h / 2 + 2]) rotate([90, 0, 0]) linear_extrude(1)
             text(str("OPENLINE ", i + 1), size = 4.5, halign = "center", valign = "center", font = "Liberation Sans:style=Bold");
     }

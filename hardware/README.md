@@ -100,7 +100,7 @@ Avoid GPIO 26–37 (flash/octal PSRAM) and 45/46 (strapping).
 | OLED 2.42" 128×64 I2C (4-pin) | SSD1309 module (1.3" SH1106 ≈ $2.20 also works) | 4.50 |
 | XLR-4 male panel | Neutrik NC4MD-L-1 (or Amphenol AX4M) | 3.50 |
 | Keys | 4× Kailh choc / 12 mm tactile with caps | 1.60 |
-| RGB LEDs | 4× WS2812B-2020 | 0.30 |
+| RGB LEDs | 4× SK6812MINI-E (reverse mount, WS2812-compatible) | 0.40 |
 | Encoder | EC11 with switch | 0.40 |
 | Charger | BQ24075RGTR | 1.10 |
 | 3.3 V buck-boost | TPS63001DRCR + 1.5 µH | 1.60 |
