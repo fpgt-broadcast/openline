@@ -1,18 +1,36 @@
-# Beltpack case, rev B (carrier-board prototype)
+# Beltpack case, rev D (carrier-board prototype)
 
-A 3D-printable case for the prototype, with the **screen and keys on the top edge**: you look down at them with the beltpack on your belt. It has a built-in 18650 battery, and the XLR-4 headset jack and USB-C are on the bottom. Also here: a belt clip, translucent lit key caps, and a 1- or 2-bay charging dock.
+A 3D-printable case for the prototype with the **"Beltpack 3" mockup on the top face**. With the beltpack on your belt, you look down at a **2.42" screen**, the **4 lit talk keys** in a row under it, and the **volume knob** at the end of the row. It has a built-in 18650 battery, and the XLR-4 headset jack and USB-C are on the bottom. Also here: a belt clip, translucent lit key caps, and a 1- or 2-bay charging dock.
 
 | | |
 |---|---|
-| ![Top, wearer's view](img/top.png) | ![Back with belt clip](img/back.png) |
-| ![Bottom: XLR-4 and USB-C](img/bottom.png) | ![2-bay dock](img/dock.png) |
+| ![Top face, wearer's view](img/top.png) | ![Back, with the belt clip](img/angle.png) |
+| ![Front, with the power switch](img/front.png) | ![Bottom: XLR-4 and USB-C](img/bottom.png) |
+| ![Inside the body](img/inside.png) | ![2-bay dock](img/dock.png) |
 
-Outside size: **84 × 50 × 122 mm** (W × D × H, including the key caps). The design is parametric OpenSCAD:
+Outside size: **90 × 66 × 102 mm** (W × D × H, plus the key caps and knob on top and the clip on the back). It's deeper than earlier revisions so the big screen *and* the key row both fit on the top face.
+
+The design is parametric OpenSCAD:
 - `params.scad` holds every dimension.
-- `./build.sh` re-exports all STLs.
+- `./build.sh` re-exports all STLs and the PCB outlines.
 - `./render.sh` redraws these images.
 
-> **Measure before printing.** Values marked `MEASURE` in `params.scad` depend on the exact modules you buy: USB-C port position, OLED stack height, switch height, XLR panel hole. Check them with calipers, then re-run `build.sh`. Print the **lid first** and test-fit the screen and keys; it's the quickest part and the most sensitive.
+> **Measure before printing.** Values marked `MEASURE` in `params.scad` depend on the exact modules you buy: the OLED's window position and stack height, switch height, USB-C port position, and the XLR panel hole. Check them with calipers, then re-run `build.sh`. Print the **lid first** and test-fit the screen and keys. It's the quickest part and the most sensitive.
+
+## Top face (wearer's view)
+
+```
+        far edge (front of the beltpack)
+ ┌──────────────────────────────────────────┐
+ │    ┌────────────────────────────────┐    │
+ │    │   2.42" OLED  (55 × 28 mm)     │    │
+ │    └────────────────────────────────┘    │
+ │   ┌───┐ ┌───┐ ┌───┐ ┌───┐     ╭───╮      │
+ │   │ 1 │ │ 2 │ │ 3 │ │ 4 │     │knob│     │
+ │   └───┘ └───┘ └───┘ └───┘     ╰───╯      │
+ └──────────────────────────────────────────┘
+        near edge (belt side, toward you)
+```
 
 ## Parts to print
 
@@ -24,15 +42,17 @@ Outside size: **84 × 50 × 122 mm** (W × D × H, including the key caps). The 
 | `stl/belt_clip.stl` | 1 | **PETG** (it needs to flex) | flat |
 | `stl/dock_1bay.stl` or `stl/dock_2bay.stl` | 1 | PLA/PETG | flat |
 
-Settings: 0.2 mm layers, 3 walls, 20–25 % infill, no supports. On the body, turn on "ironing" or a 0.12 mm first layer for a cleaner bottom face.
+Settings: 0.2 mm layers, 3 walls, 20–25 % infill, no supports. On the body, turn on "ironing" or use a 0.12 mm first layer for a cleaner bottom face.
 
 ## Hardware
 
-- 4× **M3 × 8** pan-head screws: the lid, through the front and back walls into the lid's blocks.
-- 2× **M3 heat-set inserts** (4.2 mm hole, 5 mm long) and 2× **M3 × 8 countersunk**: the belt clip.
+- **2.42" 128×64 OLED, SSD1309, 4-pin I2C version** (GND VCC SCL SDA, ≈ 61 × 37 mm). Some sellers ship these set to SPI; get the I2C one, or move the resistor jumpers as the listing describes.
+- **EC11 encoder** with an M7 bushing plus its nut, and a knob (6 mm D-shaft, ≈ 16 mm across). It's soldered to the control board; the bushing comes up through the lid and the nut holds it.
+- 4× **6 × 6 × 5 mm tactile switches** and 4× **WS2812** LEDs (one beside each switch, under its cap).
+- 4× **M3 × 8** pan-head screws: the lid, through the side walls into the lid's blocks.
 - 3× **M2 × 5** screws: the control board, into the lid posts.
+- 2× **M3 heat-set inserts** (4.2 mm hole, 5 mm long) and 2× **M3 × 8 countersunk**: the belt clip.
 - 2× **M3 × 8** with nuts: the XLR jack (Neutrik D-size flange).
-- An EC11 encoder with an **M7 threaded bushing** plus its nut, and a knob (6 mm D-shaft).
 - A mini slide switch (SS12D00-style), soldered to the **front** of the main board so its knob pokes through the slot in the front face.
 - An 18650 **holder with wire leads** (≈ 77 × 21 mm) and a **protected** 18650 cell.
 - 4 stick-on rubber feet for the dock (10 mm).
@@ -40,29 +60,28 @@ Settings: 0.2 mm layers, 3 walls, 20–25 % infill, no supports. On the body, tu
 ## Inside the case
 
 ```
- top lid ── screen + 4 lit keys
-   └─ control board (parts up): OLED, 4× 6×6×5 mm tactile switches,
-      a WS2812 LED beside each switch under its cap
-        │ 10-wire ribbon: 3V3, 5V, GND, SDA, SCL, KEY1-4, LED DIN
- main board (stands upright in the side rails, parts on the back):
+ lid (top face) ── 2.42" screen · 4 lit keys · knob
+   └─ control board (parts up): OLED on a short header, 4× 6×6×5 mm switches,
+      a WS2812 beside each switch, EC11 encoder
+        │ 12-wire ribbon: 3V3, 5V, GND, SDA, SCL, KEY1-4, ENC A/B/SW, LED DIN
+ main board (stands upright in the side rails, parts on the back, ≤ 30 mm deep):
       ESP32-S3 DevKit (USB-C at the bottom edge), WM8960 codec board,
       18650 charger + 5 V boost module, power switch on the front side
- battery tray (against the back wall) ── 18650 in its holder
+ battery ── 18650 holder lying across the floor against the back wall
  bottom ── XLR-4 (wired to the codec) · USB-C (DevKit's port)
- knob ── EC11 through the side wall (wearer's right), 4 wires to the main board
 ```
 
 Pins are the same as the build guide and `firmware/main/board.h`. Only the physical arrangement changed.
 
 **Battery wiring:** 18650 → charger/boost module input (B+ / B−). Module 5 V out → power switch → DevKit **5V** pin. Charging comes in through the DevKit's USB-C, so the dock works. Wire the module's 5 V input to the DevKit's 5 V/VBUS pad, on the USB side of the switch, so it charges with the switch off too. If your module has a "charged/charging" pin, wire it to GPIO 44 so the admin page shows charging.
 
-**Screen orientation:** fit the OLED so its text reads from the belt side, which is the wearer's view. If it comes out upside down, turn the module 180°.
+**Screen:** the firmware defaults to the 2.42" SSD1309 (`idf.py menuconfig` → *OpenLine beltpack* → *Display*). The text should read from the belt side, which is the wearer's view. If it comes out upside down, turn on *Rotate OLED 180 degrees* in the same menu. There's no need to turn the module.
 
 ## PCB outlines (for KiCad)
 
 `control_board_outline.dxf` and `main_board_outline.dxf` are the two board shapes, with the control board's three M2 holes. Import each into KiCad's PCB editor (File → Import → Graphics, layer *Edge.Cuts*).
 
-Where things sit on the control board, measured from its bottom-left corner as seen from above: subtract `cb_x[0]` and `cb_y[0]` from the case coordinates in `params.scad`. The key centres are `keys`, and the screen window centre is `oled_c`.
+Where things sit on the control board, measured from its bottom-left corner as seen from above with the front edge at the bottom: subtract `cb_x[0]` and `cb_y[0]` from the case coordinates in `params.scad`. The key centres are `keys`, the encoder is `enc_c`, and the screen window centre is `oled_c`.
 
 ## Docking
 
@@ -70,4 +89,4 @@ Where things sit on the control board, measured from its bottom-left corner as s
 2. Hot-glue it from below, then run the cable along the groove.
 3. **Unplug the headset before docking**, because the XLR is on the bottom too.
 
-The pocket holds the beltpack upright, and the notch at the back takes the belt clip.
+The pocket holds the beltpack upright. The belt clip starts above the pocket, so the dock doesn't need a notch for it.

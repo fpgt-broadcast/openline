@@ -4,11 +4,11 @@ A low-cost beltpack with a 4-pin XLR headset jack, 4 talk keys with RGB LEDs, a 
 
 | Variant | Connects via | Power | Screen | Target BOM (qty 100) |
 |---|---|---|---|---|
-| **OL-1** | Bluetooth LE to a phone/computer running the OpenLine app, **or** Wi‑Fi straight to the server | 18650 Li-ion + USB‑C charging | 1.3" OLED (SH1106) | ~$28 |
-| **OL-1E** | Same + **wired Ethernet** (W5500) | **PoE (802.3af)** and/or battery | 1.3" OLED | ~$42 |
+| **OL-1** | Bluetooth LE to a phone/computer running the OpenLine app, **or** Wi‑Fi straight to the server | 18650 Li-ion + USB‑C charging | 2.42" OLED (SSD1309) | ~$30 |
+| **OL-1E** | Same + **wired Ethernet** (W5500) | **PoE (802.3af)** and/or battery | 2.42" OLED | ~$44 |
 | e-ink option | any | any | 2.13" e-ink (SSD1680), +~$6 | |
 
-The firmware is in [`../firmware`](../firmware). **3D-printed case, belt clip, lit key caps and charging dock:** [`case/`](case/README.md) (rev B: screen and keys on the top edge, built-in 18650). Variant options are `idf.py menuconfig` → *OpenLine beltpack*.
+The firmware is in [`../firmware`](../firmware). **3D-printed case, belt clip, lit key caps and charging dock:** [`case/`](case/README.md) (rev D: 2.42" screen, 4 lit keys and the volume knob on the top face, built-in 18650). Variant options are `idf.py menuconfig` → *OpenLine beltpack*.
 
 > Status: this is a reference design and pin map, not a fabricated, validated PCB. The firmware compiles but has not been run on hardware yet. Build the dev-board prototype below first to bring up the codec, display and keys, then lay out the PCB from this document.
 
@@ -18,7 +18,7 @@ The firmware is in [`../firmware`](../firmware). **3D-printed case, belt clip, l
                 ┌──────────────── ESP32-S3-WROOM-1-N16R8 ────────────────┐
  XLR-4M ─ RF/ESD ─ WM8960 codec ── I2S (MCLK/BCLK/WS/DIN/DOUT) ─┤  Wi-Fi + BLE 5 (on module)
  headset   filter  (mic PGA+boost,     I2C ──┬─────────────────┤
-                    HP amp, sidetone)        └─ SH1106 OLED    │  USB-C (flash/console) ── USB D+/D−
+                    HP amp, sidetone)        └─ SSD1309 OLED   │  USB-C (flash/console) ── USB D+/D−
                                                                 │
  4 talk keys + EC11 encoder ────────────────── GPIO ────────────┤
  4× WS2812 (under keys) ────────────────────── GPIO47 ──────────┤
@@ -97,7 +97,7 @@ Avoid GPIO 26–37 (flash/octal PSRAM) and 45/46 (strapping).
 |---|---|---|
 | MCU module | ESP32-S3-WROOM-1-N16R8 | 3.60 |
 | Audio codec | WM8960CGEFL | 1.80 |
-| OLED 1.3" 128×64 I2C | SH1106 module | 2.20 |
+| OLED 2.42" 128×64 I2C (4-pin) | SSD1309 module (1.3" SH1106 ≈ $2.20 also works) | 4.50 |
 | XLR-4 male panel | Neutrik NC4MD-L-1 (or Amphenol AX4M) | 3.50 |
 | Keys | 4× Kailh choc / 12 mm tactile with caps | 1.60 |
 | RGB LEDs | 4× WS2812B-2020 | 0.30 |
@@ -112,8 +112,8 @@ Avoid GPIO 26–37 (flash/octal PSRAM) and 45/46 (strapping).
 | ESD / RF filtering / passives | TPD4E05U06, beads, caps | 1.20 |
 | PCB 4-layer + assembly | | 5.00 |
 | Enclosure + belt clip | 3D printed / SLA | 4.00 |
-| **Total OL-1E** | | **~$42** |
-| **OL-1** (no W5500 / MagJack / PoE) | | **~$28** |
+| **Total OL-1E** | | **~$44** |
+| **OL-1** (no W5500 / MagJack / PoE) | | **~$30** |
 
 For the cheapest build, leave out the PoE parts (OL-1), use an LDO instead of the buck-boost, and keep the OLED. E-ink adds about $6 and makes the screen readable in daylight with near-zero display power. Its slower refresh (about 0.3 s) is acceptable because the key LEDs show talk and activity instantly.
 
@@ -121,7 +121,7 @@ For the cheapest build, leave out the PoE parts (OL-1), use an LDO instead of th
 
 1. **ESP32-S3-DevKitC-1-N16R8**
 2. **SparkFun WM8960 Audio Codec Breakout** (Qwiic): wire I2C to GPIO 8/9, and I2S MCLK/BCLK/WS/DIN/DOUT to GPIO 38–42 as in the pin map. Use its 3.5 mm input/output to start with, then add the XLR-4.
-3. **1.3" SH1106 I2C OLED** on the same I2C bus.
+3. **2.42" SSD1309 I2C OLED** (the 4-pin I2C version) on the same I2C bus. The 1.3" SH1106 also works: pick it in menuconfig.
 4. **4 arcade/tactile buttons** on GPIO 4–7 to GND, **EC11 encoder** on 17/18/21, and a **4-LED WS2812 strip** on GPIO 47 (5 V).
 5. **Neutrik NC4MD-L-1** wired as in the table above, through 1 µF caps to the codec breakout's mic input and 220 µF on the headphone output.
 6. Ethernet/PoE: a **W5500 mini module** on SPI (GPIO 11–16) plus a **5 V PoE splitter** into the DevKit USB port.

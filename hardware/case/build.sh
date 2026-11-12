@@ -3,10 +3,10 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p stl
-openscad -q -D 'part="body"'    -o stl/case_body.stl beltpack_case.scad
-openscad -q -D 'part="lid"'     -o stl/case_lid.stl  beltpack_case.scad
+openscad -q -D 'part="body"'    -o stl/case_body.stl  beltpack_case.scad
+openscad -q -D 'part="lid"'     -o stl/case_lid.stl   beltpack_case.scad
 openscad -q -D 'part="keycaps"' -o stl/keycaps_x4.stl beltpack_case.scad
-openscad -q -D 'part="clip"'    -o stl/belt_clip.stl beltpack_case.scad
+openscad -q -D 'part="clip"'    -o stl/belt_clip.stl  beltpack_case.scad
 openscad -q -D bays=1 -o stl/dock_1bay.stl dock.scad
 openscad -q -D bays=2 -o stl/dock_2bay.stl dock.scad
 openscad -q -D 'board="control"' -o control_board_outline.dxf board_outline.scad

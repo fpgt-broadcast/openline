@@ -1,4 +1,5 @@
-// OpenLine beltpack case, rev B (screen + keys on the top edge).
+// OpenLine beltpack case, rev D — the "Beltpack 3" mockup on the TOP face:
+// big 2.42" screen, 4 lit keys in a row under it, volume knob at the end of the row.
 // Parts:  body | lid | keycaps | clip | assembly     (see build.sh)
 //  body    — print standing up, open top up. Bottom has XLR-4 + USB-C.
 //  lid     — print upside down (top face on the bed).
@@ -38,10 +39,8 @@ module body() {
             // rails the main board slides into (one per side wall)
             for (x0 = [in_x0 - 0.1, in_x1 - rail_w])
                 translate([x0, in_y0 - 0.1, in_z0 - 0.1]) cube([rail_w + 0.1, mb_y + mb_t + 2.4 - in_y0, mb_z[1] - in_z0]);
-            // battery (against the x = in_x1 wall): solid ledge clear of the XLR body + low corral walls
-            translate([batt_x[0], 37.5, in_z0 - 0.1]) cube([in_x1 - batt_x[0] + 0.1, in_y1 - 37.5 + 0.1, batt_z[0] - in_z0 + 0.1]);
-            translate([batt_x[0] - 1.6, batt_y[0] - 1.6, batt_z[0] - 0.1]) cube([in_x1 - batt_x[0] + 1.7, 1.6, 30]);
-            translate([batt_x[0] - 1.6, batt_y[0] - 1.6, batt_z[0] - 0.1]) cube([1.6, in_y1 - batt_y[0] + 1.7, 30]);
+            // battery corral: a low wall in front of the holder (side walls are the end stops)
+            translate([in_x0 - 0.1, batt_y[0] - 1.6, in_z0 - 0.1]) cube([in_x1 - in_x0 + 0.2, 1.6, batt_h + 0.1]);
             // belt-clip insert bosses on the back wall
             for (c = clip_holes) translate([c[0], in_y1 + 0.1, c[1]]) rotate([90, 0, 0]) cylinder(d = 9, h = insert_len + 2 - wall + 0.1);
         }
@@ -54,8 +53,6 @@ module body() {
             cylinder(d = xlr_hole_d, h = wall + 2);
             for (s = [[-xlr_screw[0], xlr_screw[1]], [xlr_screw[0], -xlr_screw[1]]]) translate(s) cylinder(d = 3.2, h = wall + 2);
         }
-        // x = 0 wall (wearer's right): encoder bushing
-        translate([-1, enc_c[0], enc_c[1]]) rotate([0, 90, 0]) cylinder(d = enc_hole_d, h = wall + 2);
         // front face: power switch slot (switch is soldered to the main board's front)
         translate([pwr_c[0], -1, pwr_c[1]]) rotate([-90, 0, 0]) linear_extrude(wall + 2) rrect([pwr_slot[0], pwr_slot[1]], 1.2);
         // lid screws
@@ -63,7 +60,7 @@ module body() {
         // belt-clip heat-set inserts, pressed in from outside
         for (c = clip_holes) translate([c[0], case_d + 1, c[1]]) rotate([90, 0, 0]) cylinder(d = insert_d, h = insert_len + 1);
         // grip grooves on both sides
-        for (z = [28 : 8 : 84], x = [-0.01, case_w - 1]) translate([x, 8, z]) cube([1.01, case_d - 16, 2.2]);
+        for (z = [26 : 8 : 82], x = [-0.01, case_w - 1]) translate([x, 10, z]) cube([1.01, case_d - 20, 2.2]);
         // name on the front face
         translate([case_w / 2, 0.6, 44]) rotate([90, 0, 0]) linear_extrude(1)
             text("OPENLINE", size = 6, halign = "center", valign = "center", spacing = 1.2, font = "Liberation Sans:style=Bold");
@@ -71,10 +68,9 @@ module body() {
 }
 
 // ---------- lid ----------
-module key_grid_box() {
-    xs = [for (k = keys) k[0]]; ys = [for (k = keys) k[1]];
-    translate([(min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2])
-        rrect([max(xs) - min(xs) + key_hole + 5, max(ys) - min(ys) + key_hole + 5], 3);
+module key_row_box(grow) {
+    xs = [for (k = keys) k[0]];
+    translate([(min(xs) + max(xs)) / 2, row_y]) rrect([max(xs) - min(xs) + key_hole + grow, key_hole + grow], 3);
 }
 module lid() {
     difference() {
@@ -94,12 +90,12 @@ module lid() {
             translate([oled_c[0], oled_c[1], cb_top_z + oled_stack + 0.2]) linear_extrude(body_h - cb_top_z - oled_stack) difference() {
                 rrect(oled_win + [3, 3], 1.5); rrect(oled_win, 1);
             }
-            // raised bezel around the display, and the guard frame around the keys
+            // raised bezel around the display, and the guard frame around the key row
             translate([oled_c[0], oled_c[1], top_z - 0.01]) linear_extrude(1.2) difference() {
-                rrect(oled_win + [7, 7], 3); rrect(oled_win + [1.5, 1.5], 1.5);
+                rrect(oled_win + [7, 6], 3); rrect(oled_win + [1.5, 1.5], 1.5);
             }
             translate([0, 0, top_z - 0.01]) linear_extrude(1.6) difference() {
-                key_grid_box();
+                key_row_box(4);
                 for (k = keys) translate(k) rrect([key_hole + 0.8, key_hole + 0.8], 2);
             }
         }
@@ -111,6 +107,7 @@ module lid() {
             translate([0, 0, lid_t + 3]) linear_extrude(0.01) rrect(oled_win + [2.5, 2.5], 1.5);
         }
         for (k = keys) translate([k[0], k[1], body_h - 1]) linear_extrude(lid_t + 5) rrect([key_hole, key_hole], 1.5);
+        translate([enc_c[0], enc_c[1], body_h - 1]) cylinder(d = enc_hole_d, h = lid_t + 5);
     }
 }
 
@@ -163,9 +160,11 @@ else {
     color("#363b42") body();
     color("#2a2e34") translate([0, 0, 0.3]) lid();
     for (i = [0:3]) color("#d8e4ee", 0.85) translate([keys[i][0], keys[i][1], top_z + key_proud + 0.3]) mirror([0, 0, 1]) keycap(i + 1);
+    color("#1d2024") translate([enc_c[0], enc_c[1], top_z + 0.8]) cylinder(d = 16, h = 14);   // knob (bought)
+    color("#0e1013") translate([oled_c[0], oled_c[1], cb_top_z + oled_stack - 0.6]) linear_extrude(0.6) rrect(oled_win + [2, 2], 1);  // screen
     color("#c9a640") translate([cb_x[0], cb_y[0], cb_top_z - cb_t]) cube([cb_x[1] - cb_x[0], cb_y[1] - cb_y[0], cb_t]);
     color("#c9a640") translate([mb_x[0], mb_y, mb_z[0]]) cube([mb_x[1] - mb_x[0], mb_t, mb_z[1] - mb_z[0]]);
-    color("#4a90d9", 0.8) translate([batt_x[0], batt_y[0], batt_z[0]]) cube([batt_x[1] - batt_x[0], batt_y[1] - batt_y[0], batt_z[1] - batt_z[0]]);
+    color("#4a90d9", 0.8) translate([case_w / 2, (batt_y[0] + batt_y[1]) / 2, in_z0 + 10]) rotate([0, 90, 0]) cylinder(d = 18.5, h = 70, center = true);
     cx = (clip_holes[0][0] + clip_holes[1][0]) / 2;
     color("#50565e") translate([cx - clip_w / 2, case_d + clip_t + clip_spacer, clip_holes[0][1] - clip_mount_len / 2])
         rotate([90, 0, 0]) belt_clip();

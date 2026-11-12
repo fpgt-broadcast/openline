@@ -7,7 +7,8 @@ include <params.scad>
 board = "control";
 
 if (board == "control") {
-    // Lies under the lid, parts on top. x/y match the case's top-view coordinates minus cb_x[0], cb_y[0].
+    // Lies under the lid, parts on top: OLED header, 4 switches + LEDs, EC11.
+    // x/y = the case's coordinates (seen from above, front edge at the bottom) minus cb_x[0], cb_y[0].
     difference() {
         offset(r = 1.5) offset(delta = -1.5) square([cb_x[1] - cb_x[0], cb_y[1] - cb_y[0]]);
         for (p = cb_posts) translate([p[0] - cb_x[0], p[1] - cb_y[0]]) circle(d = 2.2);

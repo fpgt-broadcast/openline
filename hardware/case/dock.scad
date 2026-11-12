@@ -1,4 +1,4 @@
-// OpenLine charging dock (rev B case). The beltpack stands upright and its
+// OpenLine charging dock (rev D case). The beltpack stands upright and its
 // bottom USB-C port drops onto a USB-C plug held in the dock floor.
 // Unplug the headset before docking (the XLR is on the bottom too).
 //   openscad -D bays=1 -o dock_1bay.stl dock.scad
@@ -10,26 +10,22 @@
 include <params.scad>
 
 bays          = 1;
-pocket_depth  = 16;
+pocket_depth  = 16;            // the belt clip starts above this, so no notch is needed
 pocket_clear  = 0.6;
 plug_body     = [12.6, 7.0];   // MEASURE: plug overmould width × thickness
 plug_body_len = 16;            // MEASURE: overmould length
 side          = 9;
 cable_d       = 5;
 
-clip_notch = [clip_w + 1.4, clip_t + clip_spacer + 0.8];   // the belt clip's lower end sits in the pocket
 floor_h = plug_body_len - usb_mouth + 3;
 base_h  = floor_h + pocket_depth;
 pitch   = case_w + 2 * pocket_clear + side;
 dock_w  = bays * pitch + side;
-dock_d  = case_d + 2 * pocket_clear + clip_notch[1] + 2 * side;
+dock_d  = case_d + 2 * pocket_clear + 2 * side;
 
 module rrect(size, r) { offset(r) square([size[0] - 2 * r, size[1] - 2 * r], center = true); }
 // footprint of the bottom of the case (+ clearance), in case x/y coordinates
-module case_foot(grow) {
-    translate([case_w / 2, case_d / 2]) rrect([case_w + 2 * grow, case_d + 2 * grow], r_out + grow);
-    translate([case_w / 2 - clip_notch[0] / 2 - grow, case_d - r_out]) square([clip_notch[0] + 2 * grow, r_out + clip_notch[1] + grow]);
-}
+module case_foot(grow) { translate([case_w / 2, case_d / 2]) rrect([case_w + 2 * grow, case_d + 2 * grow], r_out + grow); }
 
 difference() {
     hull() for (x = [6, dock_w - 6], y = [6, dock_d - 6]) {

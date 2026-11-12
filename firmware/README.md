@@ -33,7 +33,7 @@ IDF_COMPONENT_MANAGER=0 idf.py -DEXTRA_COMPONENT_DIRS="/opt/esp/extra/iec/led_st
 | `ble_link.c` | Phone bridge mode (keys/screen + optional audio) and BLE provisioning |
 | `net.c` | Wi‑Fi STA or W5500 Ethernet, DHCP or static IP |
 | `ui.c` | Key logic (tap = latch, hold = momentary), encoder, menu, screen layout, LEDs |
-| `display.c` | 1-bit framebuffer, SH1106/SSD1306 OLED, SSD1680 e-ink |
+| `display.c` | 1-bit framebuffer, SSD1309 (2.42") / SH1106 / SSD1306 OLED, SSD1680 e-ink |
 | `keys.c`, `power.c`, `settings.c` | Buttons/encoder/WS2812, battery/charger/headset sense, NVS settings |
 | `tools/genfont.py` | Regenerates `main/fonts.h` from a TTF |
 

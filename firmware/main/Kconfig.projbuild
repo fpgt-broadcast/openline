@@ -2,7 +2,9 @@ menu "OpenLine beltpack"
 
 choice OPENLINE_DISPLAY
     prompt "Display"
-    default OPENLINE_DISPLAY_SH1106
+    default OPENLINE_DISPLAY_SSD1309
+    config OPENLINE_DISPLAY_SSD1309
+        bool "2.42in 128x64 OLED (SSD1309, I2C) - fits the rev D case"
     config OPENLINE_DISPLAY_SH1106
         bool "1.3in 128x64 OLED (SH1106, I2C) - cheapest"
     config OPENLINE_DISPLAY_SSD1306
@@ -14,6 +16,13 @@ endchoice
 config OPENLINE_ETHERNET
     bool "W5500 Ethernet / PoE fitted"
     default y
+
+config OPENLINE_OLED_FLIP
+    bool "Rotate OLED 180 degrees"
+    depends on !OPENLINE_DISPLAY_SSD1680
+    default n
+    help
+        Turn this on if the text comes out upside down for the wearer.
 
 config OPENLINE_EPD_FLIP
     bool "Rotate e-ink display 180 degrees"
