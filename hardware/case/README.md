@@ -47,7 +47,7 @@ Settings: 0.2 mm layers, 3 walls, 20–25 % infill, no supports. On the body, tu
 ## Hardware
 
 - **2.42" 128×64 OLED, SSD1309, 4-pin I2C version** (GND VCC SCL SDA, ≈ 61 × 37 mm). Some sellers ship these set to SPI; get the I2C one, or move the resistor jumpers as the listing describes.
-- **EC11 encoder** with an M7 bushing plus its nut, and a knob (6 mm D-shaft, ≈ 16 mm across). It's soldered to the control board; the bushing comes up through the lid and the nut holds it.
+- **EC11 encoder** with push switch, M7 threaded bushing and a **20 mm shaft** (15 mm is too short to reach a knob through the lid), plus a knob that matches its shaft (6 mm knurled/"plum" or D-shaft), ≈ 15–20 mm across. It's soldered to the control board, which is screwed to the lid; the bushing comes up through the lid, so the nut is optional.
 - 4× **6 × 6 × 5 mm tactile switches** and 4× **WS2812** LEDs (one beside each switch, under its cap).
 - 4× **M3 × 8** pan-head screws: the lid, through the side walls into the lid's blocks.
 - 3× **M2 × 5** screws: the control board, into the lid posts.
