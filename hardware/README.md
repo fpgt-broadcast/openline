@@ -8,7 +8,7 @@ A low-cost beltpack with a 4-pin XLR headset jack, 4 talk keys with RGB LEDs, a 
 | **OL-1E** | Same + **wired Ethernet** (W5500) | **PoE (802.3af)** and/or battery | 1.3" OLED | ~$42 |
 | e-ink option | any | any | 2.13" e-ink (SSD1680), +~$6 | |
 
-The firmware is in [`../firmware`](../firmware). Variant options are `idf.py menuconfig` → *OpenLine beltpack*.
+The firmware is in [`../firmware`](../firmware). **3D-printed case, belt clip, lit key caps and charging dock:** [`case/`](case/README.md) (rev B: screen and keys on the top edge, built-in 18650). Variant options are `idf.py menuconfig` → *OpenLine beltpack*.
 
 > Status: this is a reference design and pin map, not a fabricated, validated PCB. The firmware compiles but has not been run on hardware yet. Build the dev-board prototype below first to bring up the codec, display and keys, then lay out the PCB from this document.
 
