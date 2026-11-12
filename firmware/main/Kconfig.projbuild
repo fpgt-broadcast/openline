@@ -13,6 +13,19 @@ choice OPENLINE_DISPLAY
         bool "2.13in 250x122 e-ink (SSD1680, SPI) - daylight readable, experimental"
 endchoice
 
+choice OPENLINE_CODEC_CLOCK
+    prompt "Codec clock"
+    default OPENLINE_CODEC_XTAL
+    help
+        How the WM8960 gets its master clock. Look at your codec board: if it has
+        a pin labelled MCLK, either works; if it has no MCLK pin (SparkFun
+        BOB-21250 and its clones carry a 24 MHz crystal), choose the crystal.
+    config OPENLINE_CODEC_XTAL
+        bool "Codec's own 24 MHz crystal (SparkFun BOB-21250 and clones)"
+    config OPENLINE_CODEC_MCLK
+        bool "ESP32 drives MCLK on GPIO 38"
+endchoice
+
 config OPENLINE_ETHERNET
     bool "W5500 Ethernet / PoE fitted"
     default y

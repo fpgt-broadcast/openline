@@ -193,7 +193,12 @@ void audio_init(audio_tx_cb_t tx, audio_gain_cb_t gain)
     s_tx_cb = tx;
     s_gain_cb = gain;
 
+#if CONFIG_OPENLINE_CODEC_XTAL
+    // the codec runs from its own crystal and drives BCLK/WS; the ESP32 follows
+    i2s_chan_config_t chan = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_SLAVE);
+#else
     i2s_chan_config_t chan = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
+#endif
     chan.dma_desc_num = 4;
     chan.dma_frame_num = AUDIO_FRAME / 2; // 10 ms per DMA buffer
     chan.auto_clear = true;
@@ -202,7 +207,12 @@ void audio_init(audio_tx_cb_t tx, audio_gain_cb_t gain)
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(AUDIO_RATE), // MCLK = 256 fs = 4.096 MHz
         .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = {
-            .mclk = PIN_I2S_MCLK, .bclk = PIN_I2S_BCLK, .ws = PIN_I2S_WS,
+#if CONFIG_OPENLINE_CODEC_XTAL
+            .mclk = I2S_GPIO_UNUSED,
+#else
+            .mclk = PIN_I2S_MCLK,
+#endif
+            .bclk = PIN_I2S_BCLK, .ws = PIN_I2S_WS,
             .dout = PIN_I2S_DOUT, .din = PIN_I2S_DIN,
         },
     };

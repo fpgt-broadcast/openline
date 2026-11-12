@@ -59,7 +59,7 @@ Same as [`firmware/main/board.h`](../firmware/main/board.h).
 | 3 | e-ink BUSY | | 16 | W5500 RST |
 | 4–7 | Talk keys 1–4 (to GND, internal pull-up) | | 17/18 | Encoder A/B |
 | 8 | I2C SDA (codec 0x1A, OLED 0x3C), 2.2k pull-up | | 21 | Encoder push |
-| 9 | I2C SCL | | 38 | I2S MCLK (4.096 MHz) |
+| 9 | I2C SCL | | 38 | I2S MCLK (4.096 MHz; only with *Codec clock → ESP32 drives MCLK*) |
 | 10 | e-ink CS | | 39 | I2S BCLK |
 | 11 | SPI MOSI | | 40 | I2S WS |
 | 12 | SPI SCK | | 41 | I2S DOUT → codec DACDAT |
@@ -120,7 +120,7 @@ For the cheapest build, leave out the PoE parts (OL-1), use an LDO instead of th
 ## Prototype from off-the-shelf boards (about $60, no PCB)
 
 1. **ESP32-S3-DevKitC-1-N16R8**
-2. **SparkFun WM8960 Audio Codec Breakout** (Qwiic): wire I2C to GPIO 8/9, and I2S MCLK/BCLK/WS/DIN/DOUT to GPIO 38–42 as in the pin map. Use its 3.5 mm input/output to start with, then add the XLR-4.
+2. **WM8960 Audio Codec Breakout, SparkFun BOB-21250 or a clone of it** (red board, ≈ $8–10 on AliExpress): wire I2C SDA/SCL to GPIO 8/9, **BCLK → 39, DACLRC → 40, DACDAT → 41, ADCDAT → 42**, and 3V3/GND. Leave ADCLRC unconnected. This board has its own 24 MHz crystal and no MCLK pin, which is the firmware default (*Codec clock → codec's own 24 MHz crystal*). A board with an MCLK pin works too: wire MCLK to GPIO 38 and pick *ESP32 drives MCLK* in menuconfig. Avoid Raspberry Pi "HAT" WM8960 boards.
 3. **2.42" SSD1309 I2C OLED** (the 4-pin I2C version) on the same I2C bus. The 1.3" SH1106 also works: pick it in menuconfig.
 4. **4 arcade/tactile buttons** on GPIO 4–7 to GND, **EC11 encoder** on 17/18/21, and a **4-LED WS2812 strip** on GPIO 47 (5 V).
 5. **Neutrik NC4MD-L-1** wired as in the table above, through 1 µF caps to the codec breakout's mic input and 220 µF on the headphone output.
