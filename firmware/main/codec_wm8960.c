@@ -1,7 +1,11 @@
 // WM8960 setup for an intercom headset: differential mic on LINPUT1(-)/LINPUT2(+)
 // -> left PGA -> boost -> ADC; DAC (mono-mixed) -> LOUT1/ROUT1 headphone amp.
 // Sidetone uses the analog bypass (boost mixer -> output mixer): zero latency.
-// I2S slave, 16-bit, MCLK = 256 * 16 kHz = 4.096 MHz from the ESP32-S3.
+// Clocking (menuconfig → OpenLine beltpack → Codec clock):
+//  - ESP32 MCLK: codec is I2S slave, MCLK = 256 * 16 kHz = 4.096 MHz from the ESP32-S3.
+//  - Codec crystal (SparkFun BOB-21250 and clones, 24 MHz on board, no MCLK pin):
+//    codec is I2S master; its PLL makes SYSCLK = 12.288 MHz, fs = SYSCLK / (3 * 256) = 16 kHz,
+//    BCLK = SYSCLK / 24 = 512 kHz (16-bit stereo).
 #include "codec_wm8960.h"
 
 #include "esp_log.h"
@@ -16,10 +20,11 @@ static uint16_t s_regs[56]; // shadow (WM8960 is write-only over I2C)
 
 enum {
     R_LINVOL = 0x00, R_RINVOL = 0x01, R_LOUT1 = 0x02, R_ROUT1 = 0x03, R_CLOCK1 = 0x04,
-    R_DACCTL1 = 0x05, R_IFACE1 = 0x07, R_LDAC = 0x0A, R_RDAC = 0x0B, R_RESET = 0x0F,
+    R_DACCTL1 = 0x05, R_IFACE1 = 0x07, R_CLOCK2 = 0x08, R_IFACE2 = 0x09, R_LDAC = 0x0A, R_RDAC = 0x0B, R_RESET = 0x0F,
     R_LADC = 0x15, R_RADC = 0x16, R_ADDCTL1 = 0x17, R_PWR1 = 0x19, R_PWR2 = 0x1A,
     R_ANTIPOP1 = 0x1C, R_ADCL_PATH = 0x20, R_ADCR_PATH = 0x21, R_LOUTMIX = 0x22,
     R_ROUTMIX = 0x25, R_LINBOOST = 0x2B, R_BYPASS1 = 0x2D, R_BYPASS2 = 0x2E, R_PWR3 = 0x2F,
+    R_PLL1 = 0x34, R_PLL2 = 0x35, R_PLL3 = 0x36, R_PLL4 = 0x37,
 };
 
 static esp_err_t wr(uint8_t reg, uint16_t val)
@@ -45,12 +50,28 @@ esp_err_t codec_init(i2c_master_bus_handle_t bus)
     wr(R_ANTIPOP1, 0x094);                 // POBCTRL | BUFDCOPEN | SOFT_ST during power-up
     wr(R_PWR1, 0x0E8);                     // VMID 50k, VREF, AINL, ADCL (MICB set later)
     vTaskDelay(pdMS_TO_TICKS(300));
+#if CONFIG_OPENLINE_CODEC_XTAL
+    wr(R_PWR2, 0x1E1);                     // DACL, DACR, LOUT1, ROUT1, PLL
+#else
     wr(R_PWR2, 0x1E0);                     // DACL, DACR, LOUT1, ROUT1
+#endif
     wr(R_PWR3, 0x02C);                     // LMIC (left PGA), LOMIX, ROMIX
     wr(R_ANTIPOP1, 0x000);
 
+#if CONFIG_OPENLINE_CODEC_XTAL
+    // 24 MHz / 2 = 12 MHz in; PLL out = 4 * 2 * 12.288 MHz = 98.304 MHz -> R = 8.192 (N 8, K 0x3126E9)
+    wr(R_PLL1, 0x020 | 0x010 | 8);         // fractional, prescale /2, N = 8
+    wr(R_PLL2, 0x31);
+    wr(R_PLL3, 0x26);
+    wr(R_PLL4, 0xE9);
+    wr(R_CLOCK1, (3 << 6) | (3 << 3) | (2 << 1) | 1); // ADC/DAC = SYSCLK/(3*256), SYSCLK = PLL/2, CLKSEL = PLL
+    wr(R_CLOCK2, 0x1C0 | 0x0C);            // BCLK = SYSCLK / 24
+    wr(R_IFACE1, 0x042);                   // master, I2S, 16-bit
+#else
     wr(R_CLOCK1, 0x000);                   // SYSCLK = MCLK, ADC/DAC fs = SYSCLK/256 = 16 kHz
     wr(R_IFACE1, 0x002);                   // slave, I2S, 16-bit
+#endif
+    wr(R_IFACE2, 0x040);                   // ADC uses DACLRC too: only one word-clock wire is needed
     wr(R_DACCTL1, 0x000);                  // DAC unmuted, ADC high-pass on
     wr(R_ADDCTL1, 0x1C0 | 0x10 | (1 << 2)); // thermal shutdown, 3.3 V, DAC mono mix, left ADC on both channels
     wr(R_LADC, 0x1C3);                     // ADC 0 dB

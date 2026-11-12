@@ -2,7 +2,9 @@ menu "OpenLine beltpack"
 
 choice OPENLINE_DISPLAY
     prompt "Display"
-    default OPENLINE_DISPLAY_SH1106
+    default OPENLINE_DISPLAY_SSD1309
+    config OPENLINE_DISPLAY_SSD1309
+        bool "2.42in 128x64 OLED (SSD1309, I2C) - fits the rev D case"
     config OPENLINE_DISPLAY_SH1106
         bool "1.3in 128x64 OLED (SH1106, I2C) - cheapest"
     config OPENLINE_DISPLAY_SSD1306
@@ -11,9 +13,29 @@ choice OPENLINE_DISPLAY
         bool "2.13in 250x122 e-ink (SSD1680, SPI) - daylight readable, experimental"
 endchoice
 
+choice OPENLINE_CODEC_CLOCK
+    prompt "Codec clock"
+    default OPENLINE_CODEC_XTAL
+    help
+        How the WM8960 gets its master clock. Look at your codec board: if it has
+        a pin labelled MCLK, either works; if it has no MCLK pin (SparkFun
+        BOB-21250 and its clones carry a 24 MHz crystal), choose the crystal.
+    config OPENLINE_CODEC_XTAL
+        bool "Codec's own 24 MHz crystal (SparkFun BOB-21250 and clones)"
+    config OPENLINE_CODEC_MCLK
+        bool "ESP32 drives MCLK on GPIO 38"
+endchoice
+
 config OPENLINE_ETHERNET
     bool "W5500 Ethernet / PoE fitted"
     default y
+
+config OPENLINE_OLED_FLIP
+    bool "Rotate OLED 180 degrees"
+    depends on !OPENLINE_DISPLAY_SSD1680
+    default n
+    help
+        Turn this on if the text comes out upside down for the wearer.
 
 config OPENLINE_EPD_FLIP
     bool "Rotate e-ink display 180 degrees"
