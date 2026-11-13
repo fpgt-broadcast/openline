@@ -2,6 +2,8 @@
 import { provision, bleSupported } from './ble.js';
 
 const $ = (id) => document.getElementById(id);
+// replaceChildren() would print null/false as text: drop them first.
+const fill = (el, ...kids) => el.replaceChildren(...kids.flat().filter((k) => k !== null && k !== undefined && k !== false));
 function h(tag, attrs = {}, ...kids) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
@@ -105,7 +107,7 @@ function renderLive() {
   // The search box is built once so typing isn't interrupted by the 2 s refresh.
   const box = $('tab-live');
   if (!box.querySelector('#liveFilter')) {
-    box.replaceChildren(
+    fill(box, 
       h('div', { class: 'row', style: { marginBottom: '8px', flexWrap: 'wrap' } },
         h('input', { id: 'liveFilter', type: 'search', placeholder: 'Search name, assignment, device or IP…', 'aria-label': 'Search connected users',
           style: { maxWidth: '360px' }, oninput: (e) => { A.liveFilter = e.target.value; renderLive(); } }),
@@ -116,7 +118,7 @@ function renderLive() {
       h('div', { id: 'liveTable' }));
   }
   $('liveCount').textContent = `${shown.length === A.sessions.length ? A.sessions.length : shown.length + ' of ' + A.sessions.length} connected · T/L force talk/listen per channel`;
-  $('liveTable').replaceChildren(h('div', { class: 'tablebox' }, h('table', {},
+  fill($('liveTable'), h('div', { class: 'tablebox' }, h('table', {},
     h('thead', {}, h('tr', {}, ['Assignment / person', 'From', 'Channels', 'State', 'Control'].map((t) => h('th', {}, t)))),
     h('tbody', {}, rows.length ? rows : h('tr', {}, h('td', { colspan: 5, class: 'muted' }, q ? 'No match' : 'Nobody connected'))))));
 }
@@ -230,7 +232,7 @@ function renderDevices() {
     A.devCards.clear();
     const grid = h('div', { class: 'devgrid' });
     for (const d of A.devices) { const c = buildDevCard(d); A.devCards.set(d.id, c); grid.append(c.card); }
-    box.replaceChildren(
+    fill(box, 
       h('div', { class: 'panel' },
         h('div', { class: 'row', style: { flexWrap: 'wrap' } },
           h('div', { class: 'grow small muted' }, 'New beltpacks appear here as soon as they connect. Set one up over Bluetooth from this computer (Chrome/Edge), or provision it with only Wi‑Fi + server URL and assign a user here.'),
@@ -297,7 +299,7 @@ function renderUsers() {
         h('button', { onclick: () => { A.editUser = u; renderUsers(); } }, 'Edit'),
         h('button', { onclick: () => { A.editUser = u; A.showInvite = true; renderUsers(); } }, 'Invite'))),
     )) : h('tr', {}, h('td', { colspan: 7, class: 'muted' }, 'No users in this show yet.')))));
-  $('tab-users').replaceChildren(
+  fill($('tab-users'), 
     h('div', { class: 'row', style: { marginBottom: '8px' } },
       h('div', { class: 'grow small muted' }, (multiShow() ? `Users in ${showName(show)}. ` : '') + 'Each user is a login for an assignment (e.g. Camera 1), a beltpack role, or an NDI bridge link. Person = who normally has it; a device can enter its own name, which wins for that device. vMix tally = the vMix input number(s) that person is on. Channel order = beltpack key order.'),
       h('button', { onclick: () => { const u = { name: 'New user ' + (users.length + 1), pin: '', channels: [], token: '', show }; A.cfg.users.push(u); A.editUser = u; setDirty(); renderUsers(); } }, 'Add user')),
@@ -390,20 +392,21 @@ function renderChannels() {
   for (const c of all) if (c.out?.card) usedCards.set(c.out.card, [...(usedCards.get(c.out.card) || []), c]);
   const anyOut = all.some((c) => c.out);
   const hasOutputsUser = A.cfg.users.some((u) => u.outputs);
-  $('tab-channels').replaceChildren(
+  fill($('tab-channels'), 
     h('div', { class: 'row', style: { marginBottom: '8px' } },
       h('div', { class: 'grow small muted' }, (multiShow() ? `Channels in ${showName(show)}. ` : '') +
         'Listen-only channels (program, NDI feeds) can only be talked on by NDI bridge users. Program channels are dipped 12 dB while anyone talks. ' +
         'Output plays a channel at the venue through the bridge: as its own NDI source and/or on a sound card output.'),
-      h('button', { onclick: () => { const id = Math.max(0, ...all.map((c) => c.id)) + 1; all.push({ id, name: 'Channel ' + id, color: '#4a90d9', show }); setDirty(); renderChannels(); } }, 'Add channel')),
+      h('button', { onclick: () => { const id = Math.max(0, ...all.map((c) => c.id)) + 1; all.push({ id, name: 'Channel ' + (chs.length + 1), color: '#4a90d9', show }); setDirty(); renderChannels(); } }, 'Add channel')),
     anyOut && !hasOutputsUser ? h('div', { class: 'banner warn', style: { borderRadius: '8px', marginBottom: '8px' } },
       'Outputs need a bridge login with the "channel outputs" role (Users tab), and its token in the "outputs" section of bridge.json.') : null,
     h('div', { class: 'tablebox' }, h('table', {},
-      h('thead', {}, h('tr', {}, ['ID', 'Name', 'Color', 'Listen-only', 'Program (duck)', 'Output', ''].map((t) => h('th', {}, t)))),
-      h('tbody', {}, chs.length ? chs.map((c) => {
+      h('thead', {}, h('tr', {}, ['#', 'Name', 'Color', 'Listen-only', 'Program (duck)', 'Output', ''].map((t) => h('th', {}, t)))),
+      h('tbody', {}, chs.length ? chs.map((c, n) => {
         const clash = c.out?.card && usedCards.get(c.out.card).length > 1;
         return h('tr', {},
-          h('td', { class: 'muted' }, String(c.id)),
+          // position in this show's list; the internal id (used in links and bridge configs) never changes
+          h('td', { class: 'muted', title: `Channel id ${c.id}` }, String(n + 1)),
           h('td', {}, h('input', { type: 'text', value: c.name, oninput: (e) => { c.name = e.target.value; setDirty(); } })),
           h('td', {}, h('input', { type: 'color', class: 'swatch', value: c.color, oninput: (e) => { c.color = e.target.value; setDirty(); } })),
           h('td', {}, h('input', { type: 'checkbox', checked: !!c.listenOnly, onchange: (e) => { c.listenOnly = e.target.checked; setDirty(); } })),
@@ -464,7 +467,7 @@ function deleteShow(s) {
 
 function renderShows() {
   const shows = A.cfg.shows;
-  $('tab-shows').replaceChildren(
+  fill($('tab-shows'), 
     h('div', { class: 'row', style: { marginBottom: '8px' } },
       h('div', { class: 'grow small muted' }, 'A show is its own set of channels and users, for running another show at the same time without crossing over. Assignment names only need to be unique within a show. Pick the show you are editing at the top of the page. Duplicate copies a show\'s channels and users with new invite links (PINs aren\'t copied).'),
       h('button', { onclick: () => { const id = Math.max(0, ...shows.map((s) => s.id)) + 1; shows.push({ id, name: uniqueShowName('Show ' + (shows.length + 1)) }); A.show = id; saveShowPref(); setDirty(); renderTab(); } }, 'Add show')),
@@ -493,7 +496,7 @@ function renderShowPicker() {
 // ---------------- Server ----------------
 function renderServer() {
   const c = A.cfg;
-  $('tab-server').replaceChildren(h('div', { class: 'panel', style: { maxWidth: '560px' } },
+  fill($('tab-server'), h('div', { class: 'panel', style: { maxWidth: '560px' } },
     h('label', {}, 'Server name'), h('input', { type: 'text', value: c.serverName, oninput: (e) => { c.serverName = e.target.value; setDirty(); } }),
     h('label', {}, 'Public URL (how off-site people reach this server; used in invite links)'),
     h('input', { type: 'text', value: c.publicURL || '', placeholder: 'https://intercom.example.com', oninput: (e) => { c.publicURL = e.target.value; setDirty(); } }),
