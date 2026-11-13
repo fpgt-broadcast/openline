@@ -157,6 +157,16 @@ type ChannelInfo struct {
 	CanListen  bool   `json:"canListen"`
 	ListenOnly bool   `json:"listenOnly,omitempty"` // e.g. program feed
 	Program    bool   `json:"program,omitempty"`    // ducked under intercom traffic
+	// Show is the channel's show name, set when the server has more than one show.
+	Show string `json:"show,omitempty"`
+	// Out is set only for a bridge "channel outputs" login: where to play it out.
+	Out *ChannelOut `json:"out,omitempty"`
+}
+
+// ChannelOut is a channel's venue output, played by the bridge.
+type ChannelOut struct {
+	NDI  bool `json:"ndi,omitempty"`
+	Card int  `json:"card,omitempty"` // 1-based sound card output channel
 }
 
 // Welcome is sent after a successful hello, and again whenever the server

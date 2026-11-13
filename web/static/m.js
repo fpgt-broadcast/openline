@@ -15,7 +15,7 @@ function h(tag, attrs = {}, ...kids) {
   return el;
 }
 
-const M = { token: sessionStorage.getItem('ol.admin') || '', cfg: null, sessions: [], tab: 'live', q: '', edit: null };
+const M = { token: sessionStorage.getItem('ol.admin') || '', cfg: null, sessions: [], tab: 'live', q: '', edit: null, show: 'all' };
 
 async function api(method, path, body) {
   const r = await fetch('api/' + path, {
@@ -56,12 +56,25 @@ const chOf = (id) => M.cfg.channels.find((c) => c.id === id);
 const chName = (id) => chOf(id)?.name || '#' + id;
 const chColor = (id) => chOf(id)?.color || '#666';
 const isBridge = (s) => s.client === 'bridge';
+const shows = () => M.cfg.shows || [];
+const multiShow = () => shows().length > 1;
+const showName = (id) => shows().find((x) => x.id === id)?.name || '';
+const inShow = (id) => M.show === 'all' || id === +M.show;
+// channel name, with its show if it isn't `from`'s show
+const chLabel = (id, from) => { const c = chOf(id); return c && multiShow() && c.show !== from ? `${showName(c.show)}: ${c.name}` : chName(id); };
+// show filter (only when there is more than one show); rebuilds the tab on change
+function showFilter() {
+  if (!multiShow()) return null;
+  return h('select', { 'aria-label': 'Show', style: { width: 'auto', flex: 'none' }, onchange: (e) => { M.show = e.target.value; $('body').replaceChildren(); render(); } },
+    h('option', { value: 'all', selected: M.show === 'all' }, 'All shows'),
+    shows().map((x) => h('option', { value: x.id, selected: String(M.show) === String(x.id) }, x.name)));
+}
 
 // ---------------- Live ----------------
 const remote = (sid, op) => api('POST', `sessions/${sid}/remote`, op);
 
 async function muteAll(on) {
-  const list = M.sessions.filter((s) => !isBridge(s) && s.muted !== on);
+  const list = M.sessions.filter((s) => !isBridge(s) && inShow(s.show) && s.muted !== on);
   if (!list.length) return toast(on ? 'Everyone is already muted.' : 'Nobody is muted.');
   await Promise.all(list.map((s) => remote(s.sid, { op: 'mute', on })));
   await refresh();
@@ -70,13 +83,14 @@ async function muteAll(on) {
 
 function sessCard(s) {
   const name = h('div', { class: 'who' }, h('b', {}, s.user), s.person ? h('span', {}, s.person) : null,
+    multiShow() ? h('span', { class: 'pill' }, showName(s.show)) : null,
     s.sending ? h('span', { class: 'pill bad' }, 'TALKING') : null,
     s.muted ? h('span', { class: 'pill bad' }, 'MIC MUTED') : null,
     s.tally === 'program' ? h('span', { class: 'pill bad' }, 'ON AIR') : s.tally === 'preview' ? h('span', { class: 'pill ok' }, 'PREVIEW') : null);
   const chips = h('div', { class: 'chs' }, s.channels.map((id) => {
     const t = s.talk.includes(id), l = s.listen.includes(id);
     return h('span', { class: 'chip' + (t ? ' talk' : ''), style: { borderLeft: `3px solid ${chColor(id)}` } },
-      chName(id), t ? ' · talk' : l ? '' : ' · off');
+      chLabel(id, s.show), t ? ' · talk' : l ? '' : ' · off');
   }));
   const acts = isBridge(s) ? h('div', { class: 'small muted' }, 'NDI bridge') : h('div', { class: 'acts' },
     h('button', { class: 'mute' + (s.muted ? ' on' : ''), onclick: run(async () => { await remote(s.sid, { op: 'mute', on: !s.muted }); await refresh(); }) },
@@ -91,14 +105,15 @@ function renderLive() {
   if (!body.querySelector('#liveList')) {
     body.replaceChildren(
       h('div', { class: 'bar' },
-        h('input', { type: 'search', placeholder: 'Search…', value: M.q, 'aria-label': 'Search connected people', oninput: (e) => { M.q = e.target.value; renderLive(); } })),
+        h('input', { type: 'search', placeholder: 'Search…', value: M.q, 'aria-label': 'Search connected people', oninput: (e) => { M.q = e.target.value; renderLive(); } }),
+        showFilter()),
       h('div', { class: 'bar' },
         sure('muteall', 'Mute all', 'Tap again to mute all', () => muteAll(true), { class: 'grow' }),
         sure('unmuteall', 'Unmute all', 'Tap again to unmute all', () => muteAll(false), { class: 'grow ghost' })),
       h('div', { id: 'liveList' }));
   }
   const q = M.q.trim().toLowerCase();
-  const shown = M.sessions.filter((s) => !q || [s.user, s.person, s.device].some((v) => (v || '').toLowerCase().includes(q)));
+  const shown = M.sessions.filter((s) => inShow(s.show) && (!q || [s.user, s.person, s.device].some((v) => (v || '').toLowerCase().includes(q))));
   // talking first, then by assignment
   shown.sort((a, b) => (b.sending - a.sending) || a.user.localeCompare(b.user));
   $('liveList').replaceChildren(...(shown.length ? shown.map(sessCard) : [h('div', { class: 'muted', style: { padding: '20px 4px' } }, q ? 'No match' : 'Nobody connected')]));
@@ -107,15 +122,25 @@ function renderLive() {
 // ---------------- Users ----------------
 function renderUsers() {
   if (M.edit) return renderEditor();
-  const users = [...M.cfg.users].sort((a, b) => a.name.localeCompare(b.name));
-  const online = new Set(M.sessions.map((s) => s.user));
+  const users = M.cfg.users.filter((u) => inShow(u.show)).sort((a, b) => (a.show - b.show) || a.name.localeCompare(b.name));
+  const online = new Set(M.sessions.map((s) => s.userId));
+  const newShow = M.show === 'all' ? shows()[0]?.id : +M.show;
+  let lastShow = null;
   $('body').replaceChildren(
-    h('div', { class: 'bar' }, h('button', { class: 'grow', onclick: () => { M.edit = { draft: { name: '', person: '', pin: '', admin: false, channels: [] }, isNew: true }; renderUsers(); } }, '+ Add user')),
-    ...users.map((u) => h('button', { class: 'urow', onclick: () => { M.edit = { draft: structuredClone(u), isNew: false }; renderUsers(); } },
-      h('span', { class: 'dot' + (online.has(u.name) ? ' ok' : '') }),
+    h('div', { class: 'bar' }, h('button', { class: 'grow', onclick: () => { M.edit = { draft: { name: '', person: '', pin: '', admin: false, channels: [], show: newShow }, isNew: true }; renderUsers(); } }, '+ Add user'), showFilter()),
+    ...users.flatMap((u) => {
+      const head = multiShow() && M.show === 'all' && u.show !== lastShow ? h('div', { class: 'showhead' }, showName(u.show)) : null;
+      lastShow = u.show;
+      return head ? [head, userRow(u, online)] : [userRow(u, online)];
+    }));
+}
+
+function userRow(u, online) {
+  return h('button', { class: 'urow', onclick: () => { M.edit = { draft: structuredClone(u), isNew: false }; renderUsers(); } },
+      h('span', { class: 'dot' + (online.has(u.id) ? ' ok' : '') }),
       h('div', { class: 'grow' }, h('b', {}, u.name), u.person ? h('div', { class: 'small muted' }, u.person) : null,
-        h('div', { class: 'small muted' }, u.bridge ? 'NDI bridge' : `${u.channels.length} channel${u.channels.length === 1 ? '' : 's'}${u.admin ? ' · admin' : ''}${u.pin ? ' · PIN' : ''}`)),
-      h('span', { class: 'muted' }, '›'))));
+        h('div', { class: 'small muted' }, u.outputs ? 'Channel outputs (bridge)' : u.bridge ? 'NDI bridge' : `${u.channels.length} channel${u.channels.length === 1 ? '' : 's'}${u.admin ? ' · admin' : ''}${u.pin ? ' · PIN' : ''}`)),
+      h('span', { class: 'muted' }, '›'));
 }
 
 function renderEditor() {
@@ -134,6 +159,13 @@ function renderEditor() {
     const a = { ch: c.id, talk: val.includes('T'), listen: val.includes('L') };
     if (i >= 0) u.channels[i] = a; else u.channels.push(a);   // new channels go after the existing keys
   };
+  const accRow = (c) => h('div', { class: 'acc' },
+    h('span', { class: 'chip grow', style: { borderLeft: `3px solid ${c.color}` } }, chLabel(c.id, u.show), c.listenOnly ? h('span', { class: 'muted' }, ' · listen-only') : ''),
+    h('select', { 'aria-label': c.name + ' access', onchange: (e) => setAccess(c, e.target.value) },
+      [['', 'No access'], ['L', 'Listen'], ['TL', 'Talk + Listen'], ['T', 'Talk only']].map(([v, t]) =>
+        h('option', { value: v, selected: access(c) === v }, t))));
+  const mine = M.cfg.channels.filter((c) => c.show === u.show || access(c));
+  const others = M.cfg.channels.filter((c) => c.show !== u.show && !access(c));
   const field = (label, key, attrs = {}) => [h('label', {}, label),
     h('input', { type: 'text', value: u[key] || '', oninput: (e) => { u[key] = attrs.trim ? e.target.value.trim() : e.target.value; }, ...attrs, trim: undefined })];
   const link = u.token ? `${(M.cfg.publicURL || location.origin).replace(/\/$/, '')}/#t=${u.token}` : '';
@@ -144,12 +176,11 @@ function renderEditor() {
     field('Person', 'person', { placeholder: 'e.g. John Doe', maxlength: 40, autocapitalize: 'words' }),
     field('PIN (optional)', 'pin', { inputmode: 'numeric', placeholder: 'none', trim: true }),
     h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!u.admin, onchange: (e) => (u.admin = e.target.checked) }), 'Admin (can use this page with their PIN)'),
+    multiShow() ? [h('label', {}, 'Show'), h('select', { onchange: (e) => { u.show = +e.target.value; renderEditor(); } },
+      shows().map((x) => h('option', { value: x.id, selected: x.id === u.show }, x.name)))] : null,
     h('label', {}, 'Channels'),
-    h('div', {}, M.cfg.channels.map((c) => h('div', { class: 'acc' },
-      h('span', { class: 'chip grow', style: { borderLeft: `3px solid ${c.color}` } }, c.name, c.listenOnly ? h('span', { class: 'muted' }, ' · listen-only') : ''),
-      h('select', { 'aria-label': c.name + ' access', onchange: (e) => setAccess(c, e.target.value) },
-        [['', 'No access'], ['L', 'Listen'], ['TL', 'Talk + Listen'], ['T', 'Talk only']].map(([v, t]) =>
-          h('option', { value: v, selected: access(c) === v }, t)))))),
+    h('div', {}, mine.map(accRow)),
+    others.length ? h('details', { style: { marginTop: '8px' } }, h('summary', { class: 'small muted' }, `Channels from other shows (${others.length})`), others.map(accRow)) : null,
     h('div', { class: 'row', style: { marginTop: '14px' } },
       h('button', { class: 'grow', style: { background: '#2f3640' }, onclick: run(saveUser) }, isNew ? 'Add user' : 'Save'),
       h('button', { class: 'ghost', onclick: close }, 'Cancel')),
@@ -165,12 +196,12 @@ async function saveUser() {
   if (!u.name) throw new Error('Assignment name is required.');
   const cfg = await api('GET', 'config');
   if (isNew) {
-    if (cfg.users.some((x) => x.name.toLowerCase() === u.name.toLowerCase())) throw new Error('There is already a user called ' + u.name + '.');
+    if (cfg.users.some((x) => x.show === u.show && x.name.toLowerCase() === u.name.toLowerCase())) throw new Error('There is already a user called ' + u.name + (multiShow() ? ' in ' + showName(u.show) : '') + '.');
     cfg.users.push({ ...u, token: '' });
   } else {
     const i = cfg.users.findIndex((x) => x.id === u.id);
     if (i < 0) throw new Error('This user was deleted on another screen.');
-    cfg.users[i] = { ...cfg.users[i], name: u.name, person: u.person, pin: u.pin, admin: u.admin, channels: u.channels };
+    cfg.users[i] = { ...cfg.users[i], name: u.name, person: u.person, pin: u.pin, admin: u.admin, channels: u.channels, show: u.show };
   }
   M.cfg = await api('PUT', 'config', cfg);
   toast(isNew ? 'User added.' : 'Saved. Their devices were updated.', 'ok');

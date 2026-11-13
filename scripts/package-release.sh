@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds all release files into dist/release/.
 #   scripts/package-release.sh <version> <path-to-opus.dll> [firmware-build-dir]
+#   Optional: PORTAUDIO_DLL=<path to a Windows portaudio DLL> (sound card outputs)
 # Used by .github/workflows/release.yml; also runnable locally.
 set -euo pipefail
 
@@ -24,7 +25,8 @@ STAGE=$(mktemp -d)
 mkdir -p "$STAGE/openline-bridge"
 cp dist/openline-bridge-windows-amd64.exe "$STAGE/openline-bridge/openline-bridge.exe"
 cp "$OPUS_DLL" "$STAGE/openline-bridge/opus.dll"
-cp packaging/windows/README.txt packaging/windows/run-bridge.bat packaging/windows/list-ndi-sources.bat "$STAGE/openline-bridge/"
+if [ -n "${PORTAUDIO_DLL:-}" ]; then cp "$PORTAUDIO_DLL" "$STAGE/openline-bridge/portaudio.dll"; fi
+cp packaging/windows/README.txt packaging/windows/run-bridge.bat packaging/windows/list-ndi-sources.bat packaging/windows/list-sound-cards.bat "$STAGE/openline-bridge/"
 go run ./cmd/openline-bridge -init | sed 's/$/\r/' > "$STAGE/openline-bridge/bridge.example.json"
 (cd "$STAGE" && python3 - "$OLDPWD/$OUT/openline-bridge-windows-amd64.zip" <<'EOF'
 import os, sys, zipfile

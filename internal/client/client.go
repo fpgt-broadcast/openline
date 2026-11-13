@@ -96,11 +96,19 @@ func (c *Client) Welcome() proto.Welcome {
 }
 
 // ChannelID resolves a channel name (case-insensitive) or numeric id.
+// With several shows, "Show B: Production" picks that show's channel.
 func (c *Client) ChannelID(name string) (int, error) {
 	w := c.Welcome()
 	for _, ch := range w.Channels {
 		if strings.EqualFold(ch.Name, name) || fmt.Sprint(ch.ID) == name {
 			return ch.ID, nil
+		}
+	}
+	if show, chName, ok := strings.Cut(name, ":"); ok {
+		for _, ch := range w.Channels {
+			if strings.EqualFold(ch.Show, strings.TrimSpace(show)) && strings.EqualFold(ch.Name, strings.TrimSpace(chName)) {
+				return ch.ID, nil
+			}
 		}
 	}
 	return 0, fmt.Errorf("channel %q not available to user %q", name, w.User)

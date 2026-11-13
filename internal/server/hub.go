@@ -208,7 +208,20 @@ func (s *Session) applyUserLocked(u User, cfg *Config) {
 	s.user = u
 	s.slots = s.slots[:0]
 	s.slotIdx = map[int]int{}
+	if u.Outputs {
+		// The bridge's channel-outputs login hears every channel with an output.
+		for _, ch := range cfg.Channels {
+			if ch.Out != nil && len(s.slots) < 32 {
+				s.slotIdx[ch.ID] = len(s.slots)
+				s.slots = append(s.slots, slot{ch: ch, canListen: true})
+				s.listen[ch.ID] = true
+			}
+		}
+	}
 	for _, a := range u.Channels {
+		if u.Outputs {
+			break
+		}
 		ch := cfg.channel(a.Ch)
 		if ch == nil {
 			continue
@@ -291,18 +304,57 @@ func (s *Session) sendWelcome() {
 		Muted:       s.muted,
 		TallyScreen: s.user.TallyScreen,
 	}
+	showName := map[int]string{}
+	for _, sh := range cfg.Shows {
+		showName[sh.ID] = sh.Name
+	}
+	spans := false // this user's channels come from more than one show
 	for _, sl := range s.slots {
-		w.Channels = append(w.Channels, proto.ChannelInfo{
+		spans = spans || sl.ch.Show != s.slots[0].ch.Show
+	}
+	for _, sl := range s.slots {
+		ci := proto.ChannelInfo{
 			ID: sl.ch.ID, Name: sl.ch.Name, Color: sl.ch.Color,
 			CanTalk: sl.canTalk, CanListen: sl.canListen,
 			ListenOnly: sl.ch.ListenOnly, Program: sl.ch.Program,
-		})
+		}
+		if len(cfg.Shows) > 1 {
+			ci.Show = showName[sl.ch.Show]
+		}
+		if spans && s.Client == "beltpack" {
+			// beltpacks show only the name: prefix the show so keys are unambiguous
+			ci.Name = shortShow(showName[sl.ch.Show]) + " " + sl.ch.Name
+		}
+		if s.user.Outputs && sl.ch.Out != nil {
+			ci.Out = &proto.ChannelOut{NDI: sl.ch.Out.NDI, Card: sl.ch.Out.Card}
+			if ci.Show == "" {
+				ci.Show = showName[sl.ch.Show]
+			}
+		}
+		w.Channels = append(w.Channels, ci)
 	}
 	h.mu.RUnlock()
 	if w.Channels == nil {
 		w.Channels = []proto.ChannelInfo{}
 	}
 	s.sendJSON(w)
+}
+
+// shortShow abbreviates a show name for a beltpack key, e.g. "Main" -> "Main:",
+// "Second Show" -> "SS:".
+func shortShow(n string) string {
+	f := strings.Fields(n)
+	if len(f) > 1 {
+		var b strings.Builder
+		for _, w := range f {
+			b.WriteString(strings.ToUpper(string([]rune(w)[:1])))
+		}
+		return b.String() + ":"
+	}
+	if r := []rune(n); len(r) > 5 {
+		n = string(r[:5])
+	}
+	return n + ":"
 }
 
 func (s *Session) sendSelfLocked() {
@@ -545,6 +597,7 @@ type SessionInfo struct {
 	User      string           `json:"user"`
 	Person    string           `json:"person,omitempty"`
 	UserID    string           `json:"userId"`
+	Show      int              `json:"show"`
 	Client    string           `json:"client"`
 	Remote    string           `json:"remote"`
 	Device    string           `json:"device,omitempty"`
@@ -577,7 +630,7 @@ func (s *Session) infoLocked() SessionInfo {
 		chs = append(chs, sl.ch.ID)
 	}
 	return SessionInfo{
-		SID: s.SID, User: s.user.Name, Person: s.personLocked(), UserID: s.user.ID, Client: s.Client, Remote: s.Remote,
+		SID: s.SID, User: s.user.Name, Person: s.personLocked(), UserID: s.user.ID, Show: s.user.Show, Client: s.Client, Remote: s.Remote,
 		Device: s.DeviceID, Connected: s.Connected, Channels: chs,
 		Talk: keys(s.talk), Listen: keys(s.listen), Call: keys(s.call), Muted: s.muted, Tally: s.tally, TallyView: s.tallyView,
 		Sending:   len(s.talk) > 0 && time.Since(s.lastRx) < 500*time.Millisecond,

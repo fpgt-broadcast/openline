@@ -25,7 +25,7 @@ There is one WebSocket per client session, at `wss://<server>/ws`. Text frames c
 
 | Message | Notes |
 |---|---|
-| `welcome` | `{sid, server, user, admin, channels:[{id,name,color,canTalk,canListen,listenOnly,program}], talk:[ids], listen:[ids], muted}`. Re-sent whenever the admin changes the config. |
+| `welcome` | `{sid, server, user, admin, channels:[{id,name,color,canTalk,canListen,listenOnly,program,show,out}], talk:[ids], listen:[ids], muted}`. Re-sent whenever the admin changes the config. `show` is the channel's show name (only when the server has more than one show). `out` (`{ndi, card}`) is sent only to a "channel outputs" bridge login: where the bridge should play that channel. |
 | `self` | `{talk:[ids], listen:[ids], muted}`. The server-authoritative state of this session. |
 | `state` | `{channels:[{id, talkers:[{sid,name}], calls:[…], members:[…]}]}`. Activity on your channels. |
 | `remote` | Admin action: `{"op":"mute","on":true}`, `{"op":"vol","ch":1,"v":80}`, `{"op":"identify"}`, `{"op":"reboot"}` |
