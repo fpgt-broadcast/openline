@@ -35,6 +35,24 @@ function msg(text, kind = 'warn', ms = 4000) {
 }
 const run = (f) => async (...a) => { try { await f(...a); } catch (e) { msg(e.message, 'bad', 6000); } };
 
+// Two-tap confirm instead of the browser's yes/no popup: the first tap arms the
+// button for 3 s ("Tap again to …"), the second does it. Native popups are
+// unreliable in Safari, especially on iPhone. Arming survives the 2 s re-renders.
+const ARM = { key: '', until: 0 };
+function sure(key, label, armedLabel, fn, attrs = {}) {
+  const armed = ARM.key === key && Date.now() < ARM.until;
+  return h('button', { ...attrs, class: ((attrs.class || '') + (armed ? ' armed' : '')).trim(), onclick: run(async (e) => {
+    const b = e.currentTarget;
+    if (ARM.key === key && Date.now() < ARM.until) { ARM.key = ''; b.classList.remove('armed'); b.textContent = label; return fn(); }
+    ARM.key = key; ARM.until = Date.now() + 3000;
+    b.textContent = armedLabel; b.classList.add('armed');
+    setTimeout(() => {
+      if (ARM.key === key && Date.now() >= ARM.until) ARM.key = '';
+      if (b.isConnected && ARM.key !== key) { b.textContent = label; b.classList.remove('armed'); }
+    }, 3050);
+  }) }, armed ? armedLabel : label);
+}
+
 function setDirty(d = true) {
   A.dirty = d;
   $('dirty').classList.toggle('hidden', !d);
@@ -69,7 +87,7 @@ function renderLive() {
       s.client === 'web' ? h('button', { class: s.tallyView ? 'on' : '', title: 'Switch this phone to / from the full-screen tally view',
         onclick: run(() => remote(s.sid, { op: 'tallyscreen', on: !s.tallyView })) }, s.tallyView ? 'Tally screen: on' : 'Tally screen: off') : null,
       h('button', { onclick: run(() => remote(s.sid, { op: 'identify' })) }, 'Identify'),
-      h('button', { onclick: run(async () => { if (confirm(`Disconnect ${s.user}?`)) await remote(s.sid, { op: 'kick' }); }) }, 'Kick'))),
+      sure('kick' + s.sid, 'Kick', 'Tap again to kick', () => remote(s.sid, { op: 'kick' })))),
   ));
   // The search box is built once so typing isn't interrupted by the 2 s refresh.
   const box = $('tab-live');
@@ -167,13 +185,12 @@ function buildDevCard(d) {
       staticBox,
       h('div', { class: 'row' }, inp('ssid', 'Wi‑Fi network (SSID)'), h('div', { class: 'grow' }, h('label', {}, 'Wi‑Fi password'), f.pass)),
       inp('server', 'Server URL', baseURL()),
-      h('button', { style: { marginTop: '8px' }, onclick: run(async () => {
+      sure('net' + d.id, 'Apply network & reboot', d.online ? 'Tap again: apply & reboot' : 'Tap again (it is offline)', async () => {
         const body = { mode: f.mode.value, dhcp: f.dhcp.value === '1', ip: f.ip.value.trim(), mask: f.mask.value.trim(), gateway: f.gateway.value.trim(), dns: f.dns.value.trim(), ssid: f.ssid.value, pass: f.pass.value, server: f.server.value.trim() };
-        if (!confirm(`Apply network settings to ${d.name}? It will reboot${d.online ? '' : ' (when it next connects you must re-apply — it is offline)'}.`)) return;
         await api('PUT', `devices/${d.id}/net`, body);
         msg(d.online ? 'Network settings sent — beltpack is rebooting' : 'Saved (beltpack offline; settings are sent when you apply while it is online)');
-      }) }, 'Apply network & reboot')),
-    h('button', { class: 'ghost', onclick: run(async () => { if (confirm(`Forget ${d.name}?`)) { await api('DELETE', `devices/${d.id}`); A.devCards.clear(); await refresh(); } }) }, 'Forget device'),
+      }, { style: { marginTop: '8px' } })),
+    sure('forget' + d.id, 'Forget device', 'Tap again to forget', async () => { await api('DELETE', `devices/${d.id}`); A.devCards.clear(); await refresh(); }, { class: 'ghost' }),
   );
   return { card, stats, keys, ctl };
 }
@@ -185,7 +202,7 @@ function updateDevCard(c, d) {
   c.ctl.replaceChildren(...(s ? [
     h('button', { class: s.muted ? 'on' : '', onclick: run(() => remote(s.sid, { op: 'mute', on: !s.muted })) }, s.muted ? 'Unmute mic' : 'Mute mic'),
     h('button', { onclick: run(() => remote(s.sid, { op: 'identify' })) }, 'Identify (flash)'),
-    h('button', { onclick: run(async () => { if (confirm('Reboot beltpack?')) await remote(s.sid, { op: 'reboot' }); }) }, 'Reboot'),
+    sure('reboot' + s.sid, 'Reboot', 'Tap again to reboot', () => remote(s.sid, { op: 'reboot' })),
   ] : []));
 }
 
@@ -303,7 +320,7 @@ function userEditor(u) {
       oninput: (e) => { u.tally = parseTally(e.target.value); setDirty(); } }),
     h('div', { class: 'row', style: { marginTop: '10px', flexWrap: 'wrap' } },
       h('button', { onclick: () => { u.token = ''; setDirty(); msg('New token is generated when you save. Old invite links and devices using it stop working.'); } }, 'Regenerate token'),
-      h('button', { class: 'ghost', onclick: () => { if (confirm(`Delete ${u.name}?`)) { A.cfg.users.splice(A.cfg.users.indexOf(u), 1); A.editUser = null; setDirty(); renderUsers(); } } }, 'Delete user')),
+      sure('deluser', 'Delete user', 'Tap again to delete', () => { A.cfg.users.splice(A.cfg.users.indexOf(u), 1); A.editUser = null; setDirty(); renderUsers(); msg(`Deleted ${u.name}. Press Save changes to apply.`); }, { class: 'ghost' })),
     link ? h('div', { style: { marginTop: '12px' } },
       h('label', {}, u.bridge ? 'Bridge token (put in bridge.json)' : 'Invite link — opens the intercom already signed in'),
       h('input', { type: 'text', readOnly: true, value: u.bridge ? u.token : link, onclick: (e) => e.target.select() }),
@@ -329,7 +346,7 @@ function renderChannels() {
         h('td', {}, h('input', { type: 'checkbox', checked: !!c.program, onchange: (e) => { c.program = e.target.checked; setDirty(); } })),
         h('td', {}, h('div', { class: 'row' },
           h('button', { onclick: () => move(i, -1) }, '↑'), h('button', { onclick: () => move(i, 1) }, '↓'),
-          h('button', { class: 'ghost', onclick: () => { if (confirm(`Delete ${c.name}? Users lose access to it.`)) { chs.splice(i, 1); setDirty(); renderChannels(); } } }, 'Delete'))),
+          sure('delch' + c.id, 'Delete', 'Tap again to delete', () => { chs.splice(chs.indexOf(c), 1); setDirty(); renderChannels(); msg(`Deleted ${c.name} (users lose access to it). Press Save changes to apply.`); }, { class: 'ghost' }))),
       ))))));
 }
 

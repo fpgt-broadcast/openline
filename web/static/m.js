@@ -34,6 +34,24 @@ function toast(text, kind = 'warn', ms = 3000) {
 }
 const run = (f) => async (...a) => { try { await f(...a); } catch (e) { toast(e.message, 'bad', 5000); } };
 
+// Two-tap confirm instead of the browser's yes/no popup: the first tap arms the
+// button for 3 s ("Tap again to …"), the second does it. Native popups are
+// unreliable in Safari, especially on iPhone. Arming survives the 2 s re-renders.
+const ARM = { key: '', until: 0 };
+function sure(key, label, armedLabel, fn, attrs = {}) {
+  const armed = ARM.key === key && Date.now() < ARM.until;
+  return h('button', { ...attrs, class: ((attrs.class || '') + (armed ? ' armed' : '')).trim(), onclick: run(async (e) => {
+    const b = e.currentTarget;
+    if (ARM.key === key && Date.now() < ARM.until) { ARM.key = ''; b.classList.remove('armed'); b.textContent = label; return fn(); }
+    ARM.key = key; ARM.until = Date.now() + 3000;
+    b.textContent = armedLabel; b.classList.add('armed');
+    setTimeout(() => {
+      if (ARM.key === key && Date.now() >= ARM.until) ARM.key = '';
+      if (b.isConnected && ARM.key !== key) { b.textContent = label; b.classList.remove('armed'); }
+    }, 3050);
+  }) }, armed ? armedLabel : label);
+}
+
 const chOf = (id) => M.cfg.channels.find((c) => c.id === id);
 const chName = (id) => chOf(id)?.name || '#' + id;
 const chColor = (id) => chOf(id)?.color || '#666';
@@ -45,7 +63,6 @@ const remote = (sid, op) => api('POST', `sessions/${sid}/remote`, op);
 async function muteAll(on) {
   const list = M.sessions.filter((s) => !isBridge(s) && s.muted !== on);
   if (!list.length) return toast(on ? 'Everyone is already muted.' : 'Nobody is muted.');
-  if (!confirm(`${on ? 'Mute' : 'Unmute'} ${list.length} mic${list.length > 1 ? 's' : ''}?`)) return;
   await Promise.all(list.map((s) => remote(s.sid, { op: 'mute', on })));
   await refresh();
   toast(on ? 'All mics muted.' : 'All mics unmuted.', 'ok');
@@ -64,7 +81,7 @@ function sessCard(s) {
   const acts = isBridge(s) ? h('div', { class: 'small muted' }, 'NDI bridge') : h('div', { class: 'acts' },
     h('button', { class: 'mute' + (s.muted ? ' on' : ''), onclick: run(async () => { await remote(s.sid, { op: 'mute', on: !s.muted }); await refresh(); }) },
       s.muted ? 'Unmute mic' : 'Mute mic'),
-    h('button', { class: 'ghost', onclick: run(async () => { if (confirm(`Disconnect ${s.person || s.user}?`)) { await remote(s.sid, { op: 'kick' }); await refresh(); } }) }, 'Kick'));
+    sure('kick' + s.sid, 'Kick', 'Tap again', async () => { await remote(s.sid, { op: 'kick' }); await refresh(); }, { class: 'ghost' }));
   return h('div', { class: 'sess' + (s.sending ? ' talking' : '') }, name,
     h('div', { class: 'small muted' }, `${s.client}${s.device ? ' · ' + s.device : ''}`), chips, acts);
 }
@@ -76,8 +93,8 @@ function renderLive() {
       h('div', { class: 'bar' },
         h('input', { type: 'search', placeholder: 'Search…', value: M.q, 'aria-label': 'Search connected people', oninput: (e) => { M.q = e.target.value; renderLive(); } })),
       h('div', { class: 'bar' },
-        h('button', { class: 'grow', onclick: run(() => muteAll(true)) }, 'Mute all'),
-        h('button', { class: 'grow ghost', onclick: run(() => muteAll(false)) }, 'Unmute all')),
+        sure('muteall', 'Mute all', 'Tap again to mute all', () => muteAll(true), { class: 'grow' }),
+        sure('unmuteall', 'Unmute all', 'Tap again to unmute all', () => muteAll(false), { class: 'grow ghost' })),
       h('div', { id: 'liveList' }));
   }
   const q = M.q.trim().toLowerCase();
@@ -137,7 +154,7 @@ function renderEditor() {
       h('button', { class: 'grow', style: { background: '#2f3640' }, onclick: run(saveUser) }, isNew ? 'Add user' : 'Save'),
       h('button', { class: 'ghost', onclick: close }, 'Cancel')),
     link ? h('button', { style: { width: '100%', marginTop: '8px' }, onclick: run(() => shareInvite(u, link)) }, 'Share invite link') : null,
-    !isNew ? h('button', { class: 'ghost', style: { width: '100%', marginTop: '8px', color: '#ffb4b6' }, onclick: run(deleteUser) }, 'Delete user') : null));
+    !isNew ? sure('deluser', 'Delete user', 'Tap again — their devices and links stop working', deleteUser, { class: 'ghost', style: { width: '100%', marginTop: '8px', color: '#ffb4b6' } }) : null));
 }
 
 // Apply just this user's changes to the server's current config, so edits
@@ -163,7 +180,6 @@ async function saveUser() {
 
 async function deleteUser() {
   const { draft: u } = M.edit;
-  if (!confirm(`Delete ${u.name}? Their devices and invite links stop working.`)) return;
   const cfg = await api('GET', 'config');
   cfg.users = cfg.users.filter((x) => x.id !== u.id);
   M.cfg = await api('PUT', 'config', cfg);
