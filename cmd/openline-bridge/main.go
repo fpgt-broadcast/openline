@@ -3,6 +3,7 @@
 // intercom channels back out as NDI sources (e.g. IFB to the announcers).
 //
 //	openline-bridge -list                 # show NDI sources on the network
+//	openline-bridge -devices              # show sound card outputs
 //	openline-bridge -init > bridge.json   # write an example config
 //	openline-bridge -config bridge.json   # run
 package main
@@ -21,6 +22,7 @@ import (
 	"openline/internal/bridge"
 	"openline/internal/ndi"
 	"openline/internal/opus"
+	"openline/internal/portaudio"
 )
 
 var version = "dev"
@@ -44,7 +46,12 @@ const example = `{
       "out": { "type": "ndi", "name": "OpenLine IFB Announcers" }
     }
   ],
-  "vmix": { "host": "192.168.1.20", "port": 8099, "token": "PASTE token of any NDI-bridge user (e.g. Program Feed)" }
+  "vmix": { "host": "192.168.1.20", "port": 8099, "token": "PASTE token of any NDI-bridge user (e.g. Program Feed)" },
+  "outputs": {
+    "token": "PASTE token of a user with the 'Channel outputs' role",
+    "ndiPrefix": "OpenLine",
+    "card": { "device": "", "latencyMs": 60 }
+  }
 }
 `
 
@@ -53,6 +60,7 @@ func main() {
 	list := flag.Bool("list", false, "list NDI sources and exit")
 	initCfg := flag.Bool("init", false, "print an example config and exit")
 	extra := flag.String("extra-ips", "", "comma separated IPs to probe for NDI sources (with -list)")
+	devices := flag.Bool("devices", false, "list sound card outputs and exit")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
@@ -62,6 +70,19 @@ func main() {
 		return
 	case *initCfg:
 		fmt.Print(example)
+		return
+	case *devices:
+		devs, err := portaudio.Outputs()
+		if err != nil {
+			log.Fatal(err)
+		}
+		if len(devs) == 0 {
+			fmt.Println("no sound card outputs found")
+		}
+		for _, d := range devs {
+			fmt.Println(d)
+		}
+		fmt.Println("\nUse the name (or part of it) as \"device\" in the \"card\" section of \"outputs\".")
 		return
 	case *list:
 		srcs, err := ndi.FindSources(4*time.Second, *extra)
@@ -81,10 +102,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("%v\n(create one with: openline-bridge -init > bridge.json)", err)
 	}
-	if len(cfg.Links) == 0 && cfg.VMix == nil {
-		log.Fatal("config has no links and no vmix section")
+	if len(cfg.Links) == 0 && cfg.VMix == nil && cfg.Outputs == nil {
+		log.Fatal("config has no links, outputs or vmix section")
 	}
-	if len(cfg.Links) > 0 {
+	if len(cfg.Links) > 0 || cfg.Outputs != nil {
 		if err := opus.Load(); err != nil {
 			log.Fatal(err)
 		}
@@ -108,11 +129,18 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	lg := log.New(os.Stderr, "", log.LstdFlags)
-	lg.Printf("OpenLine bridge %s → %s (%d links)", version, cfg.Server, len(cfg.Links))
+	lg.Printf("OpenLine bridge %s → %s (%d links%s)", version, cfg.Server, len(cfg.Links), map[bool]string{true: ", channel outputs", false: ""}[cfg.Outputs != nil])
 	var wg sync.WaitGroup
 	if cfg.VMix != nil {
 		wg.Add(1)
 		go func() { defer wg.Done(); bridge.RunVMixTally(ctx, cfg.Server, *cfg.VMix, lg) }()
+	}
+	if cfg.Outputs != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			bridge.NewOutputs(*cfg.Outputs, cfg.Server, bridge.DefaultOpener, lg).Run(ctx)
+		}()
 	}
 	for _, lc := range cfg.Links {
 		wg.Add(1)

@@ -29,6 +29,9 @@ type Config struct {
 	ExtraIPs string       `json:"ndiExtraIPs"` // optional NDI discovery IPs for routed networks
 	Links    []LinkConfig `json:"links"`
 	VMix     *VMixConfig  `json:"vmix,omitempty"` // optional: tally from vMix
+	// Outputs plays channels out at the venue (NDI and/or sound card), as
+	// chosen per channel in Admin → Channels.
+	Outputs *OutputsConfig `json:"outputs,omitempty"`
 }
 
 type LinkConfig struct {
@@ -71,6 +74,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if c.VMix != nil && (c.VMix.Host == "" || c.VMix.Token == "") {
 		return nil, errors.New("config: vmix needs host and token")
+	}
+	if c.Outputs != nil && c.Outputs.Token == "" {
+		return nil, errors.New("config: outputs needs the token of a user with the \"Channel outputs\" role")
 	}
 	for i, l := range c.Links {
 		if l.Token == "" {

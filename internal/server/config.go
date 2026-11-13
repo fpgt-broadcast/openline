@@ -16,13 +16,30 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// Show is a separate set of channels and users, e.g. a second show running at
+// the same time with its own Production and Camera channels. Channel and user
+// names only have to be unique within a show.
+type Show struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+// ChannelOut plays a channel out at the venue through the bridge's "channel
+// outputs" link: as its own NDI source and/or on a sound card output.
+type ChannelOut struct {
+	NDI  bool `json:"ndi,omitempty"`
+	Card int  `json:"card,omitempty"` // 1-based sound card output channel, 0 = none
+}
+
 // Channel is a party line. Everyone listening hears everyone talking on it.
 type Channel struct {
-	ID         int    `json:"id"`
-	Name       string `json:"name"`
-	Color      string `json:"color"`
-	ListenOnly bool   `json:"listenOnly,omitempty"` // nobody may talk (program/IFB feeds; bridges are exempt)
-	Program    bool   `json:"program,omitempty"`    // clients duck this under intercom traffic
+	ID         int         `json:"id"`
+	Name       string      `json:"name"`
+	Color      string      `json:"color"`
+	ListenOnly bool        `json:"listenOnly,omitempty"` // nobody may talk (program/IFB feeds; bridges are exempt)
+	Program    bool        `json:"program,omitempty"`    // clients duck this under intercom traffic
+	Show       int         `json:"show"`                 // Show.ID this channel belongs to
+	Out        *ChannelOut `json:"out,omitempty"`        // venue output (NDI / sound card) via the bridge
 }
 
 // Access grants a user rights on a channel. Order of a user's Access list is
@@ -50,6 +67,12 @@ type User struct {
 	Person string `json:"person,omitempty"`
 	// TallyScreen starts this user's app in the full-screen tally view.
 	TallyScreen bool `json:"tallyScreen,omitempty"`
+	// Show is the show this login belongs to (its access can still include
+	// channels from other shows, e.g. an engineer covering both).
+	Show int `json:"show"`
+	// Outputs marks the bridge login that plays channels out at the venue: it
+	// listens to every channel that has an output, whatever Channels says.
+	Outputs bool `json:"outputs,omitempty"`
 }
 
 // NetConfig is a beltpack's network setup, pushed to the device by the admin.
@@ -90,6 +113,7 @@ type Config struct {
 	// https://intercom.example.com. Used for invite links and QR codes.
 	PublicURL     string    `json:"publicURL,omitempty"`
 	AdminPassHash string    `json:"adminPassHash"`
+	Shows         []Show    `json:"shows"`
 	Channels      []Channel `json:"channels"`
 	Users         []User    `json:"users"`
 	Devices       []Device  `json:"devices"`
@@ -117,6 +141,15 @@ func defaultDeviceAudio() DeviceAudio {
 	return DeviceAudio{MicType: "dynamic", MicGain: 70, Sidetone: 20, HPLevel: 80, Bright: 80}
 }
 
+func (c *Config) show(id int) *Show {
+	for i := range c.Shows {
+		if c.Shows[i].ID == id {
+			return &c.Shows[i]
+		}
+	}
+	return nil
+}
+
 func (c *Config) channel(id int) *Channel {
 	for i := range c.Channels {
 		if c.Channels[i].ID == id {
@@ -135,6 +168,31 @@ func (c *Config) Validate() error {
 		c.ServerName = "OpenLine"
 	}
 	c.PublicURL = strings.TrimRight(strings.TrimSpace(c.PublicURL), "/")
+	// Shows: configs from before shows existed get one "Main" show.
+	if len(c.Shows) == 0 {
+		c.Shows = []Show{{ID: 1, Name: "Main"}}
+	}
+	seenShow, seenShowName := map[int]bool{}, map[string]bool{}
+	for i := range c.Shows {
+		sh := &c.Shows[i]
+		sh.Name = strings.TrimSpace(sh.Name)
+		if sh.ID <= 0 {
+			return fmt.Errorf("show %q: id must be > 0", sh.Name)
+		}
+		if seenShow[sh.ID] {
+			return fmt.Errorf("duplicate show id %d", sh.ID)
+		}
+		seenShow[sh.ID] = true
+		if sh.Name == "" {
+			sh.Name = fmt.Sprintf("Show %d", sh.ID)
+		}
+		if seenShowName[strings.ToLower(sh.Name)] {
+			return fmt.Errorf("two shows are called %q", sh.Name)
+		}
+		seenShowName[strings.ToLower(sh.Name)] = true
+	}
+	firstShow := c.Shows[0].ID
+	outputs := 0
 	seenCh := map[int]bool{}
 	for i := range c.Channels {
 		ch := &c.Channels[i]
@@ -152,8 +210,23 @@ func (c *Config) Validate() error {
 		if !colorRe.MatchString(ch.Color) {
 			ch.Color = "#4a90d9"
 		}
+		if !seenShow[ch.Show] {
+			ch.Show = firstShow
+		}
+		if ch.Out != nil {
+			ch.Out.Card = clamp(ch.Out.Card, 0, 64)
+			if !ch.Out.NDI && ch.Out.Card == 0 {
+				ch.Out = nil
+			} else {
+				outputs++
+			}
+		}
 	}
-	seenName := map[string]bool{}
+	if outputs > 32 {
+		return fmt.Errorf("at most 32 channels can have an output (%d do)", outputs)
+	}
+	seenName := map[string]bool{}       // show + name: unique within a show
+	pinsByName := map[string][]string{} // name -> PINs across shows: name + PIN must pick one user
 	seenTok := map[string]bool{}
 	seenID := map[string]bool{}
 	for i := range c.Users {
@@ -163,11 +236,29 @@ func (c *Config) Validate() error {
 		if u.Name == "" {
 			return errors.New("user name required")
 		}
-		key := strings.ToLower(u.Name)
+		if !seenShow[u.Show] {
+			u.Show = firstShow
+		}
+		if u.Outputs {
+			u.Bridge = true
+		}
+		lname := strings.ToLower(u.Name)
+		key := fmt.Sprintf("%d/%s", u.Show, lname)
 		if seenName[key] {
+			if len(c.Shows) > 1 {
+				return fmt.Errorf("two users in show %q are called %q", c.show(u.Show).Name, u.Name)
+			}
 			return fmt.Errorf("duplicate user name %q", u.Name)
 		}
 		seenName[key] = true
+		if u.PIN != "" {
+			for _, p := range pinsByName[lname] {
+				if p == u.PIN {
+					return fmt.Errorf("users called %q in different shows have the same PIN %s; give them different PINs so name + PIN sign-in knows which one", u.Name, u.PIN)
+				}
+			}
+			pinsByName[lname] = append(pinsByName[lname], u.PIN)
+		}
 		if u.ID == "" {
 			u.ID = randHex(6)
 		}
@@ -299,6 +390,7 @@ func defaultConfig(adminPass string) Config {
 	return Config{
 		ServerName:    "OpenLine",
 		AdminPassHash: hashPass(adminPass),
+		Shows:         []Show{{ID: 1, Name: "Main"}},
 		Channels: []Channel{
 			{ID: 1, Name: "Production", Color: "#e5484d"},
 			{ID: 2, Name: "Camera", Color: "#3e9bf0"},

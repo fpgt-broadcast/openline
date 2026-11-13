@@ -70,7 +70,7 @@ jobs:
       - name: Tools
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q gcc-mingw-w64-x86-64 libopus0
+          sudo apt-get install -y -q gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64 libopus0
           python -m pip install -q "esptool~=4.8"
       - name: Test
         run: go vet ./... && go test ./...
@@ -83,6 +83,15 @@ jobs:
             -DBUILD_SHARED_LIBS=ON -DOPUS_BUILD_PROGRAMS=OFF -DOPUS_BUILD_TESTING=OFF \
             -DCMAKE_SHARED_LINKER_FLAGS="-static-libgcc -static"
           cmake --build "$RUNNER_TEMP/opus-win" -j 4
+      - name: Build portaudio.dll for the Windows bridge (sound card outputs)
+        run: |
+          git clone --depth 1 -b v19.7.0 https://github.com/PortAudio/portaudio "$RUNNER_TEMP/portaudio"
+          cmake -S "$RUNNER_TEMP/portaudio" -B "$RUNNER_TEMP/portaudio-win" \
+            -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
+            -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres \
+            -DCMAKE_BUILD_TYPE=Release -DPA_BUILD_SHARED=ON -DPA_BUILD_STATIC=OFF -DPA_USE_ASIO=OFF \
+            -DCMAKE_SHARED_LINKER_FLAGS="-static-libgcc -static"
+          cmake --build "$RUNNER_TEMP/portaudio-win" -j 4
       - uses: actions/download-artifact@v4
         continue-on-error: true
         with:
@@ -91,7 +100,8 @@ jobs:
       - name: Package
         run: |
           FW=""; [ -f fwbuild/openline-beltpack.bin ] && FW="$PWD/fwbuild"
-          ./scripts/package-release.sh "$TAG" "$RUNNER_TEMP/opus-win/libopus.dll" "$FW"
+          PORTAUDIO_DLL="$RUNNER_TEMP/portaudio-win/libportaudio.dll" \
+            ./scripts/package-release.sh "$TAG" "$RUNNER_TEMP/opus-win/libopus.dll" "$FW"
       - name: Create or update the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}

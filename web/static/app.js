@@ -257,7 +257,18 @@ function renderAll() {
 
 function renderChannels() {
   const box = $('channels');
-  box.replaceChildren(...S.channels.map((ch) => {
+  // A login with channels from more than one show gets a heading per show.
+  const multiShow = new Set(S.channels.map((c) => c.show || '')).size > 1;
+  let lastShow = null;
+  box.replaceChildren(...S.channels.flatMap((ch) => {
+    const head = multiShow && ch.show !== lastShow ? h('div', { class: 'showhead' }, ch.show || '') : null;
+    lastShow = ch.show;
+    return head ? [head, chRow(ch)] : [chRow(ch)];
+  }));
+}
+
+function chRow(ch) {
+  {
     const act = activityText(ch.id);
     const calling = act.cls === 'call';
     const sel = S.targets.has(ch.id);
@@ -278,7 +289,7 @@ function renderChannels() {
         onclick: () => setListen(ch.id, !listening),
       }, listening ? 'ON' : 'OFF'),
     );
-  }));
+  }
 }
 
 function setTallyView(on) {

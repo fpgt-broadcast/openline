@@ -91,6 +91,33 @@ The bridge can read tally from vMix and show each person whether their camera is
 
 The bridge subscribes with `SUBSCRIBE TALLY`, so changes arrive instantly. If vMix becomes unreachable for more than 5 s, tally is cleared so nobody keeps a stale ON AIR light.
 
+## Channel outputs: NDI and sound card
+
+The bridge can play any intercom channel out at the venue: as **its own NDI source** (for vMix, a recorder, an NDI mixer), on a **sound card output** (a USB interface, Dante Virtual Soundcard, BlackHole…), or both. You choose it per channel in the admin page; the bridge picks up changes live.
+
+1. **Admin → Users**: add a user (e.g. `Venue Outputs`) and tick **channel outputs**. Save, then copy its token from **Edit**.
+2. **Admin → Channels**: in the **Output** column, tick **NDI** and/or choose a **Card out** number for each channel you want played out. With several shows, pick each show at the top of the page; one outputs login covers every show.
+3. For sound card outputs, install PortAudio on the bridge PC. The Windows zip already includes `portaudio.dll`. On macOS run `brew install portaudio`, on Linux `sudo apt install libportaudio2`.
+4. List the sound cards and pick one:
+
+   ```bash
+   openline-bridge -devices
+   ```
+
+5. Add an `outputs` section to `bridge.json`:
+
+   ```json
+   "outputs": {
+     "token": "<Venue Outputs token>",
+     "ndiPrefix": "OpenLine",
+     "card": { "device": "Dante Virtual Soundcard", "latencyMs": 60 }
+   }
+   ```
+
+   `device` is the name from `-devices`, or part of it (`""` = the default output). Leave out `card` if you only use NDI outputs.
+
+**Result:** every channel with NDI ticked shows up as an NDI source named `OpenLine <channel>`, or `OpenLine <show> <channel>` when there are several shows. Every channel with a card output plays on that output number of the sound card. Two channels set to the same card output are mixed together. The bridge logs each output's level every 10 s.
+
 ## Config reference
 
 | Field | Meaning |
@@ -111,6 +138,13 @@ The bridge subscribes with `SUBSCRIBE TALLY`, so changes arrive instantly. If vM
 | `out.gainDb` | Output trim |
 | `vmix.host` / `vmix.port` | vMix PC and TCP API port (default 8099) |
 | `vmix.token` | Token of an NDI-bridge user, used to publish tally |
+| `outputs.token` | Token of the user with the **channel outputs** role |
+| `outputs.ndiPrefix` | Start of each output's NDI source name (default `OpenLine`) |
+| `outputs.gainDb` | Trim for all channel outputs |
+| `outputs.card.device` | Sound card name (or part of it) from `openline-bridge -devices`; `""` = default output |
+| `outputs.card.latencyMs` | Sound card buffer (default 60) |
+
+With several shows, a link's `talk` / `listen` can name a channel as `"Show name: Channel"` when the bridge user has channels with the same name in different shows.
 
 ## Latency
 

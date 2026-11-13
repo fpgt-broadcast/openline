@@ -25,6 +25,7 @@
 <div id="main" class="admin hidden">
   <div class="row">
     <h1 class="grow" style="font-size:18px;margin:0" id="title">OpenLine Admin</h1>
+    <select id="showSel" class="hidden" aria-label="Show you are editing" style="width:auto;min-width:120px"></select>
     <span id="dirty" class="pill warn hidden">unsaved changes</span>
     <button id="saveBtn" disabled>Save changes</button>
     <a href="m.html" class="small">Phone view</a>
@@ -35,6 +36,7 @@
     <button data-tab="devices">Beltpacks</button>
     <button data-tab="users">Users</button>
     <button data-tab="channels">Channels</button>
+    <button data-tab="shows">Shows</button>
     <button data-tab="server">Server</button>
   </div>
   <div id="msg" class="banner hidden" style="border-radius:8px;margin-bottom:10px"></div>
@@ -42,6 +44,7 @@
   <section id="tab-devices" class="hidden"></section>
   <section id="tab-users" class="hidden"></section>
   <section id="tab-channels" class="hidden"></section>
+  <section id="tab-shows" class="hidden"></section>
   <section id="tab-server" class="hidden"></section>
 </div>
 <script type="module" src="admin.js"></script>
