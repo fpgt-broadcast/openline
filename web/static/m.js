@@ -1,6 +1,8 @@
 // OpenLine phone admin: mute people and edit users from a phone.
 // Same API and sign-in as admin.html (the token is shared through sessionStorage).
 const $ = (id) => document.getElementById(id);
+// replaceChildren() would print null/false as text: drop them first.
+const fill = (el, ...kids) => el.replaceChildren(...kids.flat().filter((k) => k !== null && k !== undefined && k !== false));
 function h(tag, attrs = {}, ...kids) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
@@ -103,7 +105,7 @@ function sessCard(s) {
 function renderLive() {
   const body = $('body');
   if (!body.querySelector('#liveList')) {
-    body.replaceChildren(
+    fill(body, 
       h('div', { class: 'bar' },
         h('input', { type: 'search', placeholder: 'Search…', value: M.q, 'aria-label': 'Search connected people', oninput: (e) => { M.q = e.target.value; renderLive(); } }),
         showFilter()),
@@ -116,7 +118,7 @@ function renderLive() {
   const shown = M.sessions.filter((s) => inShow(s.show) && (!q || [s.user, s.person, s.device].some((v) => (v || '').toLowerCase().includes(q))));
   // talking first, then by assignment
   shown.sort((a, b) => (b.sending - a.sending) || a.user.localeCompare(b.user));
-  $('liveList').replaceChildren(...(shown.length ? shown.map(sessCard) : [h('div', { class: 'muted', style: { padding: '20px 4px' } }, q ? 'No match' : 'Nobody connected')]));
+  fill($('liveList'), ...(shown.length ? shown.map(sessCard) : [h('div', { class: 'muted', style: { padding: '20px 4px' } }, q ? 'No match' : 'Nobody connected')]));
 }
 
 // ---------------- Users ----------------
@@ -126,7 +128,7 @@ function renderUsers() {
   const online = new Set(M.sessions.map((s) => s.userId));
   const newShow = M.show === 'all' ? shows()[0]?.id : +M.show;
   let lastShow = null;
-  $('body').replaceChildren(
+  fill($('body'), 
     h('div', { class: 'bar' }, h('button', { class: 'grow', onclick: () => { M.edit = { draft: { name: '', person: '', pin: '', admin: false, channels: [], show: newShow }, isNew: true }; renderUsers(); } }, '+ Add user'), showFilter()),
     ...users.flatMap((u) => {
       const head = multiShow() && M.show === 'all' && u.show !== lastShow ? h('div', { class: 'showhead' }, showName(u.show)) : null;
@@ -147,7 +149,7 @@ function renderEditor() {
   const { draft: u, isNew } = M.edit;
   const close = () => { M.edit = null; renderUsers(); };
   if (u.bridge) {
-    $('body').replaceChildren(h('div', { class: 'panel' }, h('b', {}, u.name),
+    fill($('body'), h('div', { class: 'panel' }, h('b', {}, u.name),
       h('p', { class: 'muted small' }, 'NDI bridge users are set up on the full admin page.'),
       h('div', { class: 'row' }, h('button', { onclick: close }, '‹ Back'), h('a', { href: 'admin.html', class: 'small' }, 'Full admin'))));
     return;
@@ -170,7 +172,7 @@ function renderEditor() {
     h('input', { type: 'text', value: u[key] || '', oninput: (e) => { u[key] = attrs.trim ? e.target.value.trim() : e.target.value; }, ...attrs, trim: undefined })];
   const link = u.token ? `${(M.cfg.publicURL || location.origin).replace(/\/$/, '')}/#t=${u.token}` : '';
 
-  $('body').replaceChildren(h('div', { class: 'panel' },
+  fill($('body'), h('div', { class: 'panel' },
     h('div', { class: 'row' }, h('button', { class: 'ghost', onclick: close }, '‹ Back'), h('b', { class: 'grow' }, isNew ? 'New user' : u.name)),
     field('Assignment (e.g. Camera 1)', 'name', { autocapitalize: 'words' }),
     field('Person', 'person', { placeholder: 'e.g. John Doe', maxlength: 40, autocapitalize: 'words' }),
