@@ -12,6 +12,7 @@ OpenLine is a self-hosted party-line intercom: an open alternative to Unity Inte
 - **Admin control of beltpacks**: battery, charging, signal, IP, headset detect and firmware. From the admin page you can force talk or listen per key, set volume, mute the mic remotely, identify (flash), reboot, re-assign the beltpack to another user, and push Wi‑Fi or Ethernet settings with DHCP or a static IP.
 - **vMix tally**: camera operators see ON AIR / PREVIEW on their phone or beltpack, mapped per user to vMix inputs. There's an optional full-screen tally view (still with a talk button), switchable from the admin page.
 - **Shows**: run more than one show at the same time. Each show is its own set of channels and users (e.g. a second show with its own Production and Camera channels), so they never cross over. Duplicate a show in one click; someone covering both can have channels from each.
+- **Sound card links**: connect another headset system (e.g. Saramonic WiTalk9), a wired party line, walkie-talkies or a mixer to an OpenLine channel through any sound card on the bridge PC.
 - **Channel outputs**: play any channel out at the venue, as its own NDI source and/or on a sound card output (USB interface, Dante Virtual Soundcard…), chosen per channel in the admin page.
 - **Phone admin**: a small admin page for phones (`/m.html`) to mute mics and edit users.
 - **Quick start guide**: a short skippable walkthrough on each new device, re-openable from the Menu.

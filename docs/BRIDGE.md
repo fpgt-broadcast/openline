@@ -118,6 +118,50 @@ The bridge can play any intercom channel out at the venue: as **its own NDI sour
 
 **Result:** every channel with NDI ticked shows up as an NDI source named `OpenLine <channel>`, or `OpenLine <show> <channel>` when there are several shows. Every channel with a card output plays on that output number of the sound card. Two channels set to the same card output are mixed together. The bridge logs each output's level every 10 s.
 
+## Sound card links: WiTalk9 and other headset systems
+
+A link's `in` and `out` can be a **sound card** instead of NDI. That connects OpenLine to anything with an audio jack: a wireless headset system like the Saramonic WiTalk9, a wired party-line interface, walkie-talkies or a mixer. The other system's crew then sounds like one more person on an OpenLine channel, and they hear that channel.
+
+The bridge runs on a computer **at the venue** (near the other system), not on the OpenLine server. It only needs an internet connection out to the server.
+
+### Saramonic WiTalk9
+
+You need the **WiTalk9 Link cable kit** (sold separately): its TRRS cable plus the TRRS-to-USB sound card. A plain 3-pole aux cable carries audio one way only. A generic 4-pole cable may not work either, because the same Saramonic cable is used to cascade two WiTalk systems.
+
+1. **Admin → Users:** add a user, e.g. `WiTalk`, with the **NDI bridge** role and **Talk + Listen** on the channel the WiTalk crew should be on (e.g. Camera). Copy its token.
+2. Plug the USB sound card into the bridge PC. Connect it to the WiTalk **master or remote** headset with the Link cable.
+3. On that headset, **hold ENC for 3 seconds** until the mic light is **solid purple** (cascade/link connection on). This is off after every power-up. Keep the headset's **sidetone off** while linked.
+4. Find the sound card's name:
+
+   ```bash
+   openline-bridge -devices
+   ```
+
+   On Windows the input and output have different names, e.g. `Microphone (USB Audio Device)` and `Speakers (USB Audio Device)`. A shared part such as `USB Audio` matches both.
+5. Add a link to `bridge.json`:
+
+   ```json
+   {
+     "name": "WiTalk",
+     "token": "<WiTalk user token>",
+     "talk": ["Camera"],
+     "listen": ["Camera"],
+     "in":  { "type": "card", "device": "USB Audio", "gateDb": -45 },
+     "out": { "type": "card", "device": "USB Audio" }
+   }
+   ```
+
+**Result:** whatever the WiTalk crew says is heard on Camera, and they hear everyone talking on Camera. The server never sends a link its own audio, so they don't hear themselves echoed. `gateDb` makes the link "talk" only while someone on the WiTalk is speaking, so OpenLine shows them as talking only then. Raise it (e.g. `-40`) if background noise keeps it open; lower it if quiet speech gets cut.
+
+If Windows makes the USB sound card its default playback device, set your normal speakers back as the default so system sounds don't go to the crew.
+
+### Any other sound card
+
+- `in.device` / `out.device`: the name (or part of it) from `openline-bridge -devices`; `""` = the default device.
+- `in.channels`: which inputs to use, counting from 0, mixed to mono. Default `[0]`.
+- `out.channels`: which outputs to play on, counting from 0. Default: both sides of a stereo card.
+- The card is used at 48 kHz when it supports it. Inputs fall back to the card's own rate.
+
 ## Config reference
 
 | Field | Meaning |
@@ -126,14 +170,17 @@ The bridge can play any intercom channel out at the venue: as **its own NDI sour
 | `ndiExtraIPs` | Comma-separated IPs for NDI discovery across subnets |
 | `links[].token` | Token of a user with the NDI bridge role |
 | `links[].talk` / `listen` | Channel names (or ids) |
-| `in.type` | `ndi`, or `tone` (test beep) |
+| `in.type` | `ndi`, `card` (sound card), or `tone` (test beep) |
+| `in.device` | `card`: sound card input name, or part of it (`""` = default input) |
 | `in.source` | NDI source name. Matched exactly, or by a unique substring. |
-| `in.channels` | Which NDI audio channels to mix to mono (0-based); empty = all |
+| `in.channels` | Which audio channels to mix to mono (0-based). NDI: empty = all. Card: empty = `[0]` |
 | `in.gainDb` | Input trim |
 | `in.gateDb` | Only talk while louder than this (e.g. `-45`). Omit for always-on feeds such as program. |
 | `in.holdMs` | Gate hold time (default 600) |
 | `in.music` | Encode for music (program) instead of speech |
-| `out.type` | `ndi`, or `null` (testing) |
+| `out.type` | `ndi`, `card` (sound card), or `null` (testing) |
+| `out.device` | `card`: sound card output name, or part of it (`""` = default output) |
+| `out.channels` | `card`: outputs to play on (0-based); empty = both sides of a stereo card |
 | `out.name` | Name of the NDI source the bridge publishes |
 | `out.gainDb` | Output trim |
 | `vmix.host` / `vmix.port` | vMix PC and TCP API port (default 8099) |

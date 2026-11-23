@@ -72,17 +72,25 @@ func main() {
 		fmt.Print(example)
 		return
 	case *devices:
-		devs, err := portaudio.Outputs()
-		if err != nil {
-			log.Fatal(err)
+		for _, input := range []bool{false, true} {
+			list, title := portaudio.Outputs, "Sound card outputs"
+			if input {
+				list, title = portaudio.Inputs, "Sound card inputs"
+			}
+			devs, err := list()
+			if err != nil {
+				log.Fatal(err)
+			}
+			fmt.Println(title + ":")
+			if len(devs) == 0 {
+				fmt.Println("  none found")
+			}
+			for _, d := range devs {
+				fmt.Println("  " + d.String())
+			}
+			fmt.Println()
 		}
-		if len(devs) == 0 {
-			fmt.Println("no sound card outputs found")
-		}
-		for _, d := range devs {
-			fmt.Println(d)
-		}
-		fmt.Println("\nUse the name (or part of it) as \"device\" in the \"card\" section of \"outputs\".")
+		fmt.Println(`Use a name (or part of it) as "device": in "outputs" > "card", or in a link's "in"/"out" with "type": "card".`)
 		return
 	case *list:
 		srcs, err := ndi.FindSources(4*time.Second, *extra)

@@ -25,6 +25,7 @@ const (
 	// Pa_WriteStream reports an underflow when the card ran dry; the data was
 	// still written, so it isn't an error for us.
 	paOutputUnderflowed = -9980
+	paInputOverflowed   = -9981
 )
 
 // C layouts (identical on 64-bit Windows, macOS and Linux; see the comments
@@ -73,9 +74,11 @@ var (
 	paGetDeviceInfo    func(i int32) *deviceInfo
 	paGetHostAPIInfo   func(i int32) *hostAPIInfo
 	paGetDefaultOutput func() int32
+	paGetDefaultInput  func() int32
 	paOpenStream       func(stream *uintptr, in, out *streamParameters, rate float64, frames uint, flags uint, cb, user uintptr) int32
 	paStartStream      func(s uintptr) int32
 	paWriteStream      func(s uintptr, buf *float32, frames uint) int32
+	paReadStream       func(s uintptr, buf *float32, frames uint) int32
 	paStopStream       func(s uintptr) int32
 	paCloseStream      func(s uintptr) int32
 	paGetErrorText     func(code int32) *byte
@@ -109,9 +112,11 @@ func Load() error {
 		reg(&paGetDeviceInfo, "Pa_GetDeviceInfo")
 		reg(&paGetHostAPIInfo, "Pa_GetHostApiInfo")
 		reg(&paGetDefaultOutput, "Pa_GetDefaultOutputDevice")
+		reg(&paGetDefaultInput, "Pa_GetDefaultInputDevice")
 		reg(&paOpenStream, "Pa_OpenStream")
 		reg(&paStartStream, "Pa_StartStream")
 		reg(&paWriteStream, "Pa_WriteStream")
+		reg(&paReadStream, "Pa_ReadStream")
 		reg(&paStopStream, "Pa_StopStream")
 		reg(&paCloseStream, "Pa_CloseStream")
 		reg(&paGetErrorText, "Pa_GetErrorText")
@@ -140,15 +145,18 @@ func errText(rc int32) string {
 	return fmt.Sprintf("%s (%d)", gostr(paGetErrorText(rc)), rc)
 }
 
-// Device is a sound card output the OS exposes.
+// Device is a sound card the OS exposes. A card usually shows up once as an
+// output and (on Windows, under a different name) once as an input.
 type Device struct {
 	Index       int
 	Name        string
 	HostAPI     string // e.g. "Windows WASAPI", "Core Audio", "ALSA"
 	MaxOut      int
+	MaxIn       int
 	DefaultRate float64
-	LowLatency  time.Duration
+	LowLatency  time.Duration // for the direction it was listed under
 	Default     bool
+	input       bool
 }
 
 func (d Device) String() string {
@@ -156,23 +164,32 @@ func (d Device) String() string {
 	if d.Default {
 		def = "  (default)"
 	}
+	if d.input {
+		return fmt.Sprintf("%-50s %2d inputs   %s%s", d.Name, d.MaxIn, d.HostAPI, def)
+	}
 	return fmt.Sprintf("%-50s %2d outputs  %s%s", d.Name, d.MaxOut, d.HostAPI, def)
 }
 
-// Outputs lists devices that have output channels.
-func Outputs() ([]Device, error) {
+func list(input bool) ([]Device, error) {
 	if err := Load(); err != nil {
 		return nil, err
 	}
 	def := int(paGetDefaultOutput())
+	if input {
+		def = int(paGetDefaultInput())
+	}
 	var out []Device
 	for i := int32(0); i < paGetDeviceCount(); i++ {
 		di := paGetDeviceInfo(i)
-		if di == nil || di.maxOut <= 0 {
+		if di == nil || (input && di.maxIn <= 0) || (!input && di.maxOut <= 0) {
 			continue
 		}
-		d := Device{Index: int(i), Name: gostr(di.name), MaxOut: int(di.maxOut), DefaultRate: di.defaultRate,
-			LowLatency: time.Duration(di.lowOut * float64(time.Second)), Default: int(i) == def}
+		lat := di.lowOut
+		if input {
+			lat = di.lowIn
+		}
+		d := Device{Index: int(i), Name: gostr(di.name), MaxOut: int(di.maxOut), MaxIn: int(di.maxIn), DefaultRate: di.defaultRate,
+			LowLatency: time.Duration(lat * float64(time.Second)), Default: int(i) == def, input: input}
 		if hi := paGetHostAPIInfo(di.hostAPI); hi != nil {
 			d.HostAPI = gostr(hi.name)
 		}
@@ -180,6 +197,12 @@ func Outputs() ([]Device, error) {
 	}
 	return out, nil
 }
+
+// Outputs lists devices that have output channels.
+func Outputs() ([]Device, error) { return list(false) }
+
+// Inputs lists devices that have input channels.
+func Inputs() ([]Device, error) { return list(true) }
 
 // hostRank prefers the low-latency, multichannel-friendly host API when the
 // same card shows up several times (Windows lists each card under MME,
@@ -197,15 +220,21 @@ func hostRank(h string) int {
 	return 3
 }
 
-// FindOutput picks a device by name: exact match first, then the first that
+// FindOutput picks an output by name: exact match first, then the first that
 // contains name (case-insensitive). Empty name = the system default output.
-func FindOutput(name string) (Device, error) {
-	devs, err := Outputs()
+func FindOutput(name string) (Device, error) { return find(name, false) }
+
+// FindInput picks an input the same way. Empty name = the system default input.
+func FindInput(name string) (Device, error) { return find(name, true) }
+
+func find(name string, input bool) (Device, error) {
+	devs, err := list(input)
 	if err != nil {
 		return Device{}, err
 	}
+	what := map[bool]string{true: "inputs", false: "outputs"}[input]
 	if len(devs) == 0 {
-		return Device{}, errors.New("no sound card outputs found")
+		return Device{}, fmt.Errorf("no sound card %s found", what)
 	}
 	if name == "" {
 		for _, d := range devs {
@@ -221,7 +250,7 @@ func FindOutput(name string) (Device, error) {
 		for _, d := range devs {
 			dn := strings.ToLower(d.Name)
 			if (exact && dn == n) || (!exact && strings.Contains(dn, n)) {
-				if !found || hostRank(d.HostAPI) < hostRank(best.HostAPI) || (hostRank(d.HostAPI) == hostRank(best.HostAPI) && d.MaxOut > best.MaxOut) {
+				if !found || hostRank(d.HostAPI) < hostRank(best.HostAPI) || (hostRank(d.HostAPI) == hostRank(best.HostAPI) && d.MaxOut+d.MaxIn > best.MaxOut+best.MaxIn) {
 					best, found = d, true
 				}
 			}
@@ -230,7 +259,7 @@ func FindOutput(name string) (Device, error) {
 			return best, nil
 		}
 	}
-	return Device{}, fmt.Errorf("no sound card output matching %q (run openline-bridge -devices to list them)", name)
+	return Device{}, fmt.Errorf("no sound card %s matching %q (run openline-bridge -devices to list them)", what, name)
 }
 
 // Stream is an open, running 48 kHz float32 output stream.
@@ -282,6 +311,76 @@ func (st *Stream) Write(interleaved []float32) error {
 }
 
 func (st *Stream) Close() {
+	if st.s != 0 {
+		paStopStream(st.s)
+		paCloseStream(st.s)
+		st.s = 0
+	}
+}
+
+// InStream is an open, running float32 input stream.
+type InStream struct {
+	s        uintptr
+	channels int
+	Rate     int
+	Device   Device
+}
+
+// OpenInput opens dev's first `channels` inputs. It tries 48 kHz, then the
+// card's own default rate (the caller resamples).
+func OpenInput(dev Device, channels int, latency time.Duration) (*InStream, error) {
+	if err := Load(); err != nil {
+		return nil, err
+	}
+	if channels <= 0 {
+		channels = 1
+	}
+	if channels > dev.MaxIn {
+		return nil, fmt.Errorf("%q has %d inputs, %d needed", dev.Name, dev.MaxIn, channels)
+	}
+	if latency < dev.LowLatency {
+		latency = dev.LowLatency
+	}
+	p := streamParameters{device: int32(dev.Index), channels: int32(channels), format: paFloat32, latency: latency.Seconds()}
+	var lastErr error
+	for _, rate := range []float64{SampleRate, dev.DefaultRate} {
+		if rate <= 0 {
+			continue
+		}
+		var s uintptr
+		if rc := paOpenStream(&s, &p, nil, rate, 0, 0, 0, 0); rc != 0 {
+			lastErr = fmt.Errorf("open input %q at %.0f Hz with %d channels: %s", dev.Name, rate, channels, errText(rc))
+			continue
+		}
+		if rc := paStartStream(s); rc != 0 {
+			paCloseStream(s)
+			lastErr = fmt.Errorf("start input %q: %s", dev.Name, errText(rc))
+			continue
+		}
+		return &InStream{s: s, channels: channels, Rate: int(rate), Device: dev}, nil
+	}
+	return nil, lastErr
+}
+
+// Channels is the number of interleaved channels Read fills.
+func (st *InStream) Channels() int { return st.channels }
+
+// Read fills interleaved (len = frames × Channels), blocking until the card
+// has delivered that much.
+func (st *InStream) Read(interleaved []float32) error {
+	frames := len(interleaved) / st.channels
+	if frames == 0 {
+		return nil
+	}
+	rc := paReadStream(st.s, &interleaved[0], uint(frames))
+	runtime.KeepAlive(interleaved)
+	if rc != 0 && rc != paInputOverflowed {
+		return errors.New(errText(rc))
+	}
+	return nil
+}
+
+func (st *InStream) Close() {
 	if st.s != 0 {
 		paStopStream(st.s)
 		paCloseStream(st.s)
