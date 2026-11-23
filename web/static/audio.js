@@ -45,7 +45,12 @@ export class AudioEngine {
     if (!codecSupport()) throw new Error('This browser lacks WebCodecs audio (use current Chrome, Edge, Firefox or Safari 26+).');
     setAudioSessionType(background);
     this.ctx = new AudioContext({ sampleRate: SR, latencyHint: 'interactive' });
-    this.ctx.addEventListener('statechange', () => this.event('audio ' + this.ctx.state));
+    this.ctx.addEventListener('statechange', () => {
+      this.event('audio ' + this.ctx.state);
+      // iOS pauses the audio when the phone locks while the page keeps running:
+      // with background audio on, ask for it back straight away.
+      if (this.bgEl && this.ctx.state !== 'running' && this.ctx.state !== 'closed') this.resumeSoon();
+    });
     await this.ctx.audioWorklet.addModule('worklets.js');
 
     this.player = new AudioWorkletNode(this.ctx, 'ol-player', { numberOfInputs: 0, outputChannelCount: [1] });
@@ -91,17 +96,42 @@ export class AudioEngine {
       for (const ev of ['pause', 'playing', 'stalled', 'ended']) el.addEventListener(ev, () => this.event('player ' + ev));
       this.bgEl = el;
       if (this.sinkId && el.setSinkId) el.setSinkId(this.sinkId).catch(() => {});
+      // iOS only counts a real audio file as "now playing" (lock-screen
+      // controls, and the audio session it keeps alive), not a live stream:
+      // loop a silent one alongside.
+      const keep = new Audio('silence.wav');
+      keep.loop = true;
+      keep.addEventListener('pause', () => this.event('silent loop paused'));
+      this.keepEl = keep;
       this.ensurePlaying();
     } else {
       this.bgEl.pause();
       this.bgEl.srcObject = null;
       this.bgEl = null;
+      this.keepEl.pause();
+      this.keepEl = null;
       this.outGain.connect(this.ctx.destination);
     }
   }
 
   ensurePlaying() {
-    if (this.bgEl && this.bgEl.paused) this.bgEl.play().catch((e) => this.event('player play failed: ' + e.name));
+    if (!this.bgEl) return;
+    if (this.bgEl.paused) this.bgEl.play().catch((e) => this.event('player play failed: ' + e.name));
+    if (this.keepEl && this.keepEl.paused) this.keepEl.play().catch((e) => this.event('silent loop play failed: ' + e.name));
+    if (this.ctx.state !== 'running') this.resumeSoon(0);
+  }
+
+  // Resume the audio, at most every 2 s so it can't spin if iOS keeps saying no.
+  resumeSoon(delay = 300) {
+    if (this.resumeTimer) return;
+    const wait = Math.max(delay, 2000 - (performance.now() - (this.lastResume || -1e9)));
+    this.resumeTimer = setTimeout(() => {
+      this.resumeTimer = null;
+      if (!this.ctx || this.ctx.state === 'running' || this.ctx.state === 'closed') return;
+      this.lastResume = performance.now();
+      this.event('asking to resume audio');
+      this.ctx.resume().catch((e) => this.event('resume refused: ' + e.name));
+    }, wait);
   }
 
   makeEncoder(bitrate, onBytes) {
@@ -212,6 +242,7 @@ export class AudioEngine {
     this.decoders.clear();
     if (this.micStream) this.micStream.getTracks().forEach((t) => t.stop());
     if (this.bgEl) { this.bgEl.pause(); this.bgEl.srcObject = null; this.bgEl = null; }
+    if (this.keepEl) { this.keepEl.pause(); this.keepEl = null; }
     try { this.enc && this.enc.close(); } catch {}
     if (this.ctx) await this.ctx.close();
     this.ctx = null;
