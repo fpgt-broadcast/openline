@@ -216,16 +216,21 @@ func TestAdminMuteAndRemote(t *testing.T) {
 
 func TestBeltpackAdoptAssignAndNet(t *testing.T) {
 	h := newHarness(t)
-	// A fresh beltpack with only a device id connects unassigned.
-	_, bpRec := h.connect(proto.Msg{Client: "beltpack", Device: "AA:BB:CC:00:11:22"})
+	// A fresh beltpack with only a device id connects unassigned once the
+	// admin opens the new-beltpack window.
+	h.do("POST", "/api/pairing", map[string]int{"minutes": 10}, nil, 200)
+	bp, bpRec := h.connect(proto.Msg{Client: "beltpack", Device: "AA:BB:CC:00:11:22"})
 	eventually(t, "settings push", func() bool { return bpRec.has(`"t":"settings"`) })
 	if bpRec.has(`"channels":[{`) {
 		t.Fatal("unassigned device must not get channels")
 	}
 	var devs []DeviceInfo
 	h.do("GET", "/api/devices", nil, &devs, 200)
-	if len(devs) != 1 || devs[0].ID != "aabbcc001122" || !devs[0].Online {
+	if len(devs) != 1 || devs[0].ID != "aabbcc001122" || !devs[0].Online || !devs[0].Pending {
 		t.Fatalf("devices = %+v", devs)
+	}
+	if len(h.srv.Store.Get().Devices) != 0 {
+		t.Fatal("an unadopted beltpack must not be saved")
 	}
 	cfg := h.srv.Store.Get()
 	cam := cfg.Users[1]
@@ -237,13 +242,17 @@ func TestBeltpackAdoptAssignAndNet(t *testing.T) {
 	eventually(t, "assign", func() bool { return bpRec.has(`"t":"assign","token":"` + cam.Token) })
 	eventually(t, "sidetone", func() bool { return bpRec.has(`"sidetone":55`) })
 
-	// Static IP config is pushed; bad static config rejected.
+	// Device reconnects with the token (as the firmware does after "assign").
+	bp.Close()
+	eventually(t, "old session gone", func() bool { return len(h.srv.Hub.Sessions()) == 0 })
+	bp2, bp2Rec := h.connect(proto.Msg{Client: "beltpack", Device: "aabbcc001122", Token: cam.Token})
+
+	// Static IP config is pushed to the signed-in beltpack; bad static config rejected.
 	h.do("PUT", "/api/devices/aabbcc001122/net", NetConfig{Mode: "ethernet", DHCP: false, IP: "nope"}, nil, 400)
 	h.do("PUT", "/api/devices/aabbcc001122/net", NetConfig{Mode: "ethernet", DHCP: false, IP: "10.0.0.50", Mask: "255.255.255.0", Gateway: "10.0.0.1"}, nil, 200)
-	eventually(t, "netcfg", func() bool { return bpRec.has(`"t":"netcfg","mode":"ethernet","dhcp":false,"ip":"10.0.0.50"`) })
+	eventually(t, "netcfg", func() bool { return bp2Rec.has(`"t":"netcfg","mode":"ethernet","dhcp":false,"ip":"10.0.0.50"`) })
 
-	// Device reconnects with the token + telemetry; admin sees battery.
-	bp2, _ := h.connect(proto.Msg{Client: "beltpack", Device: "aabbcc001122", Token: cam.Token})
+	// Admin sees battery.
 	bp2.Send(proto.Telemetry{T: "telemetry", Battery: 77, Net: "ethernet", PoE: true, IP: "10.0.0.50"})
 	eventually(t, "telemetry", func() bool {
 		h.do("GET", "/api/devices", nil, &devs, 200)
@@ -330,4 +339,125 @@ func TestPersonNames(t *testing.T) {
 	// Long names are capped at 40 characters.
 	cam.Send(proto.Msg{T: "name", Name: strings.Repeat("x", 80)})
 	eventually(t, "capped", func() bool { return len(persons()["Camera 1"]) == 40 })
+}
+
+// Without the admin's new-beltpack window, a device id alone gets nobody in,
+// and nothing is saved.
+func TestBeltpackNeedsPairingWindow(t *testing.T) {
+	h := newHarness(t)
+	if _, err := client.Dial(context.Background(), h.ts.URL, proto.Msg{Client: "beltpack", Device: "aabbcc001122"}); err == nil {
+		t.Fatal("anonymous beltpack accepted with the window closed")
+	}
+	h.do("POST", "/api/pairing", map[string]int{"minutes": 5}, nil, 200)
+	h.connect(proto.Msg{Client: "beltpack", Device: "aabbcc001122"})
+	// a second connection claiming the same id is refused
+	if _, err := client.Dial(context.Background(), h.ts.URL, proto.Msg{Client: "beltpack", Device: "aabbcc001122"}); err == nil {
+		t.Fatal("second connection with the same device id accepted")
+	}
+	h.do("POST", "/api/pairing", map[string]int{"minutes": 0}, nil, 200)
+	if len(h.srv.Store.Get().Devices) != 0 {
+		t.Fatal("anonymous beltpack was saved to the config")
+	}
+}
+
+// Someone who only knows an assigned beltpack's id must not be able to take its
+// place and receive the Wi-Fi password or a user token meant for it.
+func TestBeltpackIDCannotBeHijacked(t *testing.T) {
+	h := newHarness(t)
+	cfg := h.srv.Store.Get()
+	cam, a1 := cfg.Users[1], cfg.Users[2]
+	real, _ := h.connect(proto.Msg{Client: "beltpack", Device: "aabbcc001122", Token: cam.Token})
+	real.Close()
+	eventually(t, "real device gone", func() bool { return len(h.srv.Hub.Sessions()) == 0 })
+
+	h.do("POST", "/api/pairing", map[string]int{"minutes": 5}, nil, 200)
+	_, atkRec := h.connect(proto.Msg{Client: "beltpack", Device: "aabbcc001122"})
+	h.do("PUT", "/api/devices/aabbcc001122/net", NetConfig{Mode: "wifi", DHCP: true, SSID: "Venue", Pass: "secret-pass"}, nil, 200)
+	time.Sleep(100 * time.Millisecond)
+	if atkRec.has("secret-pass") {
+		t.Fatal("Wi-Fi password sent to a connection without the device's token")
+	}
+	// another user's token can't claim it either
+	if _, err := client.Dial(context.Background(), h.ts.URL, proto.Msg{Client: "beltpack", Device: "aabbcc001122", Token: a1.Token}); err == nil {
+		t.Fatal("another user's token took over an assigned beltpack")
+	}
+	// a name + PIN login can't rebind a beltpack to itself
+	h.connect(proto.Msg{User: "A1", PIN: "3333", Client: "web", Device: "aabbcc001122"})
+	time.Sleep(50 * time.Millisecond)
+	if cfg := h.srv.Store.Get(); cfg.device("aabbcc001122") == nil || cfg.device("aabbcc001122").UserID != cam.ID {
+		t.Fatal("device rebound by a PIN login")
+	}
+}
+
+// Behind the Cloudflare tunnel every request comes from the cloudflared
+// container: the real client IP must come from CF-Connecting-IP, so one
+// attacker's failed logins don't lock everybody out.
+func TestClientIPBehindTrustedProxy(t *testing.T) {
+	srv := New(nil, nil)
+	req := func(peer, cf, xff string) *http.Request {
+		r := httptest.NewRequest("GET", "/", nil)
+		r.RemoteAddr = peer + ":5555"
+		if cf != "" {
+			r.Header.Set("CF-Connecting-IP", cf)
+		}
+		if xff != "" {
+			r.Header.Set("X-Forwarded-For", xff)
+		}
+		return r
+	}
+	if ip := srv.clientIP(req("172.18.0.3", "203.0.113.9", "")); ip != "172.18.0.3" {
+		t.Fatalf("untrusted peer's header believed: %s", ip)
+	}
+	srv.TrustProxies([]string{"172.18.0.0/16"})
+	if ip := srv.clientIP(req("172.18.0.3", "203.0.113.9", "")); ip != "203.0.113.9" {
+		t.Fatalf("CF-Connecting-IP ignored: %s", ip)
+	}
+	// the caller can put anything first in X-Forwarded-For; only the last entry counts
+	if ip := srv.clientIP(req("127.0.0.1", "", "6.6.6.6, 198.51.100.4")); ip != "198.51.100.4" {
+		t.Fatalf("spoofable X-Forwarded-For entry used: %s", ip)
+	}
+}
+
+func TestLoginLimitsPerName(t *testing.T) {
+	h := newHarness(t)
+	// different IPs (as through the tunnel), same name: blocked after nameFailLimit
+	for i := 0; i < nameFailLimit; i++ {
+		h.srv.limiter.fail("name:director", nameFailLimit)
+	}
+	if _, err := client.Dial(context.Background(), h.ts.URL, proto.Msg{User: "Director", PIN: "1111"}); err == nil {
+		t.Fatal("correct PIN accepted while the name is blocked after many wrong guesses")
+	}
+	// short PINs can't open the admin page
+	h.admin = ""
+	h.do("POST", "/api/admin/login", map[string]string{"user": "Camera 1", "pin": "2222"}, nil, 401)
+}
+
+func TestAdminPINMinimum(t *testing.T) {
+	h := newHarness(t)
+	h.do("POST", "/api/admin/login", map[string]string{"user": "Director", "pin": "1111"}, nil, 403)
+	var cfg Config
+	h.do("GET", "/api/config", nil, &cfg, 200)
+	cfg.Users[0].PIN = "482913"
+	h.do("PUT", "/api/config", cfg, nil, 200)
+	h.do("POST", "/api/admin/login", map[string]string{"user": "Director", "pin": "482913"}, nil, 200)
+}
+
+func TestSecurityHeadersAndNoTokenInURL(t *testing.T) {
+	h := newHarness(t)
+	resp, err := http.Get(h.ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.Header.Get("X-Frame-Options") != "DENY" || !strings.Contains(resp.Header.Get("Content-Security-Policy"), "frame-ancestors 'none'") {
+		t.Fatalf("missing anti-framing headers: %v", resp.Header)
+	}
+	resp, err = http.Get(h.ts.URL + "/api/qr?text=x&k=" + h.admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 401 {
+		t.Fatalf("admin token accepted in the URL: %d", resp.StatusCode)
+	}
 }

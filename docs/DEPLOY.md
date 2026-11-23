@@ -25,6 +25,8 @@ docker compose pull cloudflared && docker compose up -d
 
 No Docker? Install `cloudflared` and run `cloudflared tunnel run --token …` next to `openline-server`.
 
+The compose file starts the server with `-trusted-proxy cloudflared`, so failed-login limits apply to each visitor's real IP rather than to the tunnel as a whole. It only publishes port 8999 on `127.0.0.1`, so nobody else on your network can reach the server over plain HTTP around Cloudflare.
+
 ## Option 2: Public IP + automatic Let's Encrypt
 
 Forward TCP 80 and 443 to the server and point a DNS name at it.
@@ -77,6 +79,13 @@ This serves `https://<LAN-IP>:8999` with a self-signed certificate made for this
 | Beltpack standalone (Wi‑Fi / Ethernet / PoE) | **Admin → Beltpacks → Set up beltpack via Bluetooth** (Chrome/Edge). Enter Wi‑Fi details, the server URL and the user. After that, every beltpack setting can be changed from Admin, including a static IP. |
 | NDI program / announcers | Run `openline-bridge` on a computer at the venue. See [BRIDGE.md](BRIDGE.md). |
 | Hands-free talk | A USB foot pedal that sends Space, the keyboard (Space / 1–9 / C), or the headphone play/pause button (Menu → *Headphone button*). |
+
+## Security on a public server
+
+- **PINs**: anyone on the internet can try them. Give every login its own PIN, 6+ digits for anything important. Signing in to the admin page with a PIN needs 6 or more digits; otherwise use the admin password. The admin page warns about easy PINs such as the demo ones.
+- **Wrong guesses**: 8 wrong logins from one IP, or 20 for one name or for the admin password, block further tries for a minute.
+- **New beltpacks**: a beltpack with no user can only connect while **Admin → Beltpacks → Accept new beltpacks** is on (10 minutes). Beltpacks set up over Bluetooth with a user connect any time. A beltpack's Wi-Fi settings are only sent to it once it has a user and is signed in with that user's token.
+- **Behind another reverse proxy** (Option 4): if it doesn't run on the same machine, start the server with `-trusted-proxy <proxy IP or host name>` so login limits see real visitor IPs.
 
 ## Phones in the background (iPhone)
 
