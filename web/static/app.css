@@ -80,6 +80,7 @@ header.top .who b { font-size: 15px; }
 @media (min-width: 700px) { .sheet-bg { align-items: center; } .sheet { border-radius: 16px; } }
 .sheet h2 { margin: 0; font-size: 18px; }
 .sheet h3 { margin: 16px 0 6px; font-size: 12px; color: var(--muted); letter-spacing: .5px; text-transform: uppercase; }
+.sheet .bglog { margin: 6px 0 0; max-height: 170px; overflow: auto; padding: 8px; background: var(--panel2); border: 1px solid var(--line2); border-radius: 8px; font: 11px/1.4 ui-monospace, Menlo, monospace; white-space: pre-wrap; color: var(--muted); }
 .sheet .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
 .people { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { padding: 4px 8px; border-radius: 6px; background: var(--panel2); font-size: 12px; }
