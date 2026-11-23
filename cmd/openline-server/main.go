@@ -119,7 +119,13 @@ func banner(store *server.Store, genPass, listen, domain string, tlsOn bool) {
 	if genPass != "" {
 		fmt.Printf(" First run: admin password is  %s\n", genPass)
 		fmt.Println(" (change it on the Admin page; shown only once)")
-		fmt.Println(" Demo users: Director/1111  Camera 1/2222  A1/3333")
+		fmt.Print(" Starter users (name / PIN):")
+		for _, u := range cfg.Users {
+			if u.PIN != "" {
+				fmt.Printf("  %s / %s", u.Name, u.PIN)
+			}
+		}
+		fmt.Println()
 	}
 	var urls []string
 	if cfg.PublicURL != "" {

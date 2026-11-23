@@ -1,208 +1,117 @@
-# NDI bridge: program audio and announcer talkback
+# The bridge (venue PC)
 
-`openline-bridge` runs on a computer **at the venue**, on the same network as your NDI sources. It connects out to the OpenLine server, so it needs no port forwarding. Each entry in its config is a **link**. A link is one intercom session that can:
+`openline-bridge` runs on a computer **at the venue**. It connects out to the server (no port forwarding) and links the intercom to what's at the venue:
 
-- **take an NDI source in** and talk it onto channels (program feed, announcer talkback mic), and/or
-- **send channels out as a new NDI source** (e.g. an IFB/cue feed back to the announcers).
+| Want | Section |
+|---|---|
+| Program audio to everyone, director ↔ announcers over NDI | [NDI links](#ndi-links-program-and-announcers) |
+| ON AIR / PREVIEW from vMix on people's phones and beltpacks | [vMix tally](#vmix-tally) |
+| A channel out at the venue as an NDI source or on a sound card | [Channel outputs](#channel-outputs) |
+| Another headset system (Saramonic WiTalk9), walkie-talkies, a mixer | [Sound card links](#sound-card-links-witalk9-and-others) |
 
-When a link has both, the announcers never hear their own voice echoed back. The server never sends a session its own audio (mix-minus).
+## Setup
 
-## Typical setup: director ↔ announcers + program
-
-```
- Announce booth                         On-site bridge PC                 Off-site server        Crew
- ┌───────────────┐  NDI "Talkback"  ┌───────────────────────┐   wss    ┌──────────────┐    ┌─────────┐
- │ talkback mic  │ ───────────────► │ link "Announcers"     │ ───────► │  channel     │ ◄─►│Director │
- │ headphones ◄──┼── NDI "OpenLine  │   in  → talk          │ ◄─────── │ "Announcers" │    │app/belt │
- └───────────────┘   IFB Announcers"│   out ← listen        │          │              │    └─────────┘
- Production PC  NDI "Program" ────► │ link "Program" in→talk│ ───────► │ "Program"    │ ──► everyone
-                                    └───────────────────────┘          └──────────────┘    (ducked)
-```
-
-1. **Admin → Channels.** Make sure `Announcers` exists (it's in the default config). Make `Program` *listen-only + program*.
-2. **Admin → Users**:
-   - `Announcer Link`: role **NDI bridge**, *Talk + Listen* on `Announcers`.
-   - `Program Feed`: role **NDI bridge**, *Talk* on `Program`.
-   - Give the Director (and anyone else who should hear or reach the booth) *Talk + Listen* on `Announcers` and *Listen* on `Program`.
-   - Copy each bridge user's **token** from its Edit panel.
-3. On the bridge PC, install **NDI Tools** (which includes the NDI runtime) from ndi.video and **libopus**:
-   - Windows: put `opus.dll` next to `openline-bridge.exe` (from any libopus build, e.g. the msys2 `mingw-w64-x86_64-opus` package), or set `OPUS_LIB`.
-   - macOS: `brew install opus`
-   - Linux: `sudo apt install libopus0`
-4. List the NDI sources it can see:
-
-   ```bash
-   openline-bridge -list
-   ```
-
-5. Create the config, then edit the server URL, tokens and NDI source names:
+1. **Windows:** unzip the release's bridge zip; it has `opus.dll` and `portaudio.dll` and its own `README.txt`. **macOS:** `brew install opus portaudio`. **Linux:** `sudo apt install libopus0 libportaudio2`.
+2. For NDI, install **NDI Tools** from ndi.video (it includes the NDI runtime).
+3. Make a config, then fill in the server URL and the parts you need from the sections below:
 
    ```bash
    openline-bridge -init > bridge.json
-   ```
-
-   ```json
-   {
-     "server": "https://intercom.example.com",
-     "links": [
-       {
-         "name": "Program",
-         "token": "<Program Feed token>",
-         "talk": ["Program"],
-         "in": { "type": "ndi", "source": "PRODUCTION-PC (Program)", "channels": [0, 1], "music": true }
-       },
-       {
-         "name": "Announcers",
-         "token": "<Announcer Link token>",
-         "talk": ["Announcers"],
-         "listen": ["Announcers"],
-         "in":  { "type": "ndi", "source": "BOOTH-PC (Talkback)", "channels": [0], "gateDb": -45 },
-         "out": { "type": "ndi", "name": "OpenLine IFB Announcers" }
-       }
-     ]
-   }
-   ```
-
-6. Run the bridge:
-
-   ```bash
+   openline-bridge -list        # NDI sources it can see
+   openline-bridge -devices     # sound card inputs and outputs
    openline-bridge -config bridge.json
    ```
 
-   Every 10 s each link logs `online · in peak −18 dB, sent 4.2s · out peak −12 dB`.
-7. In the booth's NDI-capable mixer or NDI Tools, subscribe the announcers' headphone feed to **OpenLine IFB Announcers**.
+Every 10 s each link logs a status line, e.g. `[Announcers] online · in peak −18 dB, sent 4.2s · out peak −12 dB`. It reconnects by itself if the server, network or a source drops. To start it with the computer: Task Scheduler (Windows, *At startup*), launchd (macOS) or systemd (Linux).
 
-**Result:** the director selects *Announcers* and holds PTT, and the announcers hear them in their IFB. When an announcer presses their talkback (or just speaks into the talkback mic, past the gate), the director hears them on the *Announcers* channel. Program plays to everyone and dips 12 dB whenever someone talks.
+Each **link** in `bridge.json` signs in as a user with the **NDI bridge** role (Admin → Users; copy its token from **Edit**) and can take audio **in** (talks onto channels) and/or send channels **out**. A link never hears itself back, so there's no echo.
+
+## NDI links: program and announcers
+
+1. **Admin → Channels:** make `Program` *listen-only + program*, and have an `Announcers` channel.
+2. **Admin → Users:** `Program Feed` (NDI bridge, *Talk* on Program) and `Announcer Link` (NDI bridge, *Talk + Listen* on Announcers). Give the director *Talk + Listen* on Announcers.
+3. In `bridge.json`:
+
+   ```json
+   "links": [
+     { "name": "Program", "token": "<Program Feed token>", "talk": ["Program"],
+       "in": { "type": "ndi", "source": "PRODUCTION-PC (Program)", "music": true } },
+     { "name": "Announcers", "token": "<Announcer Link token>", "talk": ["Announcers"], "listen": ["Announcers"],
+       "in":  { "type": "ndi", "source": "BOOTH-PC (Talkback)", "channels": [0], "gateDb": -45 },
+       "out": { "type": "ndi", "name": "OpenLine IFB Announcers" } }
+   ]
+   ```
+
+4. In the booth, feed the announcers' headphones from the NDI source **OpenLine IFB Announcers**.
+
+Program plays to everyone and dips 12 dB while anyone talks. The director talks to the booth on *Announcers*; the booth's talkback mic is heard there whenever it's louder than the gate.
 
 ## vMix tally
 
-The bridge can read tally from vMix and show each person whether their camera is **ON AIR** or in **PREVIEW**. The app shows a red ON AIR bar and frame (green for preview), the beltpack shows `LIVE`/`PVW` with a frame on the screen, and the admin Live tab shows it too.
-
-1. **Admin → Users → Edit** a camera operator. Under *vMix tally inputs*, enter their vMix input number(s), e.g. `2`.
-2. Add to `bridge.json` (any user with the NDI bridge role can send tally):
+1. **Admin → Users → Edit** each camera operator: enter their vMix input number(s) under *vMix tally inputs*.
+2. In `bridge.json` (any NDI-bridge user's token works):
 
    ```json
    "vmix": { "host": "192.168.1.20", "port": 8099, "token": "<Program Feed token>" }
    ```
 
-   The bridge PC must be able to reach the vMix PC on TCP **8099** (vMix's TCP API, always on). A bridge can run with only a `vmix` section and no NDI links; then neither NDI nor libopus is needed.
+The bridge PC must reach the vMix PC on TCP 8099. A bridge can run with only `vmix` (then no NDI or libopus is needed). Tally clears if vMix is unreachable for 5 s, so nobody keeps a stale ON AIR.
 
-**Full-screen tally view:** for a phone mounted on a camera, the whole screen turns red (ON AIR) or green (PREVIEW), with a big talk button kept at the bottom (tap = latch, hold = talk to the person's selected channels). Turn it on from the app (**Menu → Full-screen tally view**), for one person live (**Admin → Live → Tally screen**), or as a default for a user (**Admin → Users → tally screen**). **Exit** returns to the normal view.
+**Full-screen tally view** (a phone on a camera): the screen turns red or green, with a big talk button. Turn it on in the app (Menu), live for one person (Admin → Live), or as a user's default (Admin → Users → *tally screen*).
 
-The bridge subscribes with `SUBSCRIBE TALLY`, so changes arrive instantly. If vMix becomes unreachable for more than 5 s, tally is cleared so nobody keeps a stale ON AIR light.
+## Channel outputs
 
-## Channel outputs: NDI and sound card
+Play a channel at the venue as its own NDI source and/or on a sound card output (USB interface, Dante Virtual Soundcard…).
 
-The bridge can play any intercom channel out at the venue: as **its own NDI source** (for vMix, a recorder, an NDI mixer), on a **sound card output** (a USB interface, Dante Virtual Soundcard, BlackHole…), or both. You choose it per channel in the admin page; the bridge picks up changes live.
-
-1. **Admin → Users**: add a user (e.g. `Venue Outputs`) and tick **channel outputs**. Save, then copy its token from **Edit**.
-2. **Admin → Channels**: in the **Output** column, tick **NDI** and/or choose a **Card out** number for each channel you want played out. With several shows, pick each show at the top of the page; one outputs login covers every show.
-3. For sound card outputs, install PortAudio on the bridge PC. The Windows zip already includes `portaudio.dll`. On macOS run `brew install portaudio`, on Linux `sudo apt install libportaudio2`.
-4. List the sound cards and pick one:
-
-   ```bash
-   openline-bridge -devices
-   ```
-
-5. Add an `outputs` section to `bridge.json`:
+1. **Admin → Users:** add a user (e.g. `Venue Outputs`) and tick **channel outputs**. Copy its token.
+2. **Admin → Channels:** in the **Output** column tick **NDI** and/or pick a **Card out** number. One outputs login covers every show.
+3. In `bridge.json` (leave out `card` for NDI only):
 
    ```json
-   "outputs": {
-     "token": "<Venue Outputs token>",
-     "ndiPrefix": "OpenLine",
-     "card": { "device": "Dante Virtual Soundcard", "latencyMs": 60 }
-   }
+   "outputs": { "token": "<Venue Outputs token>", "ndiPrefix": "OpenLine",
+                "card": { "device": "Dante Virtual Soundcard", "latencyMs": 60 } }
    ```
 
-   `device` is the name from `-devices`, or part of it (`""` = the default output). Leave out `card` if you only use NDI outputs.
+NDI outputs appear as `OpenLine <channel>` (`OpenLine <show> <channel>` with several shows). Two channels on the same card output are mixed. Changes in admin apply live.
 
-**Result:** every channel with NDI ticked shows up as an NDI source named `OpenLine <channel>`, or `OpenLine <show> <channel>` when there are several shows. Every channel with a card output plays on that output number of the sound card. Two channels set to the same card output are mixed together. The bridge logs each output's level every 10 s.
+## Sound card links: WiTalk9 and others
 
-## Sound card links: WiTalk9 and other headset systems
+A link's `in` and `out` can be a sound card, so another system's crew sounds like one more person on an OpenLine channel and hears that channel.
 
-A link's `in` and `out` can be a **sound card** instead of NDI. That connects OpenLine to anything with an audio jack: a wireless headset system like the Saramonic WiTalk9, a wired party-line interface, walkie-talkies or a mixer. The other system's crew then sounds like one more person on an OpenLine channel, and they hear that channel.
+**Saramonic WiTalk9** needs the **WiTalk9 Link cable kit** (TRRS cable + USB sound card). A plain aux cable only carries audio one way.
 
-The bridge runs on a computer **at the venue** (near the other system), not on the OpenLine server. It only needs an internet connection out to the server.
-
-### Saramonic WiTalk9
-
-You need the **WiTalk9 Link cable kit** (sold separately): its TRRS cable plus the TRRS-to-USB sound card. A plain 3-pole aux cable carries audio one way only. A generic 4-pole cable may not work either, because the same Saramonic cable is used to cascade two WiTalk systems.
-
-1. **Admin → Users:** add a user, e.g. `WiTalk`, with the **NDI bridge** role and **Talk + Listen** on the channel the WiTalk crew should be on (e.g. Camera). Copy its token.
-2. Plug the USB sound card into the bridge PC. Connect it to the WiTalk **master or remote** headset with the Link cable.
-3. On that headset, **hold ENC for 3 seconds** until the mic light is **solid purple** (cascade/link connection on). This is off after every power-up. Keep the headset's **sidetone off** while linked.
-4. Find the sound card's name:
-
-   ```bash
-   openline-bridge -devices
-   ```
-
-   On Windows the input and output have different names, e.g. `Microphone (USB Audio Device)` and `Speakers (USB Audio Device)`. A shared part such as `USB Audio` matches both.
-5. Add a link to `bridge.json`:
+1. **Admin → Users:** add `WiTalk` with the **NDI bridge** role and *Talk + Listen* on the crew's channel (e.g. Camera). Copy its token.
+2. Plug the USB sound card into the bridge PC and connect it to the WiTalk **master or remote** headset with the Link cable.
+3. On that headset, **hold ENC for 3 s** until the mic light is **solid purple** (off after every power-up). Keep its sidetone off.
+4. In `bridge.json` (`USB Audio` = part of the name shown by `-devices`; on Windows a shared part matches both the input and the output):
 
    ```json
-   {
-     "name": "WiTalk",
-     "token": "<WiTalk user token>",
-     "talk": ["Camera"],
-     "listen": ["Camera"],
+   { "name": "WiTalk", "token": "<WiTalk token>", "talk": ["Camera"], "listen": ["Camera"],
      "in":  { "type": "card", "device": "USB Audio", "gateDb": -45 },
-     "out": { "type": "card", "device": "USB Audio" }
-   }
+     "out": { "type": "card", "device": "USB Audio" } }
    ```
 
-**Result:** whatever the WiTalk crew says is heard on Camera, and they hear everyone talking on Camera. The server never sends a link its own audio, so they don't hear themselves echoed. `gateDb` makes the link "talk" only while someone on the WiTalk is speaking, so OpenLine shows them as talking only then. Raise it (e.g. `-40`) if background noise keeps it open; lower it if quiet speech gets cut.
-
-If Windows makes the USB sound card its default playback device, set your normal speakers back as the default so system sounds don't go to the crew.
-
-### Any other sound card
-
-- `in.device` / `out.device`: the name (or part of it) from `openline-bridge -devices`; `""` = the default device.
-- `in.channels`: which inputs to use, counting from 0, mixed to mono. Default `[0]`.
-- `out.channels`: which outputs to play on, counting from 0. Default: both sides of a stereo card.
-- The card is used at 48 kHz when it supports it. Inputs fall back to the card's own rate.
+`gateDb` makes the link talk only while someone speaks: raise it (e.g. `-40`) if noise keeps it open, lower it if quiet speech is cut. If Windows makes the USB card the default playback device, set your normal speakers back as default.
 
 ## Config reference
 
 | Field | Meaning |
 |---|---|
-| `server` | Server URL (`https://…`, or `http://…` on a LAN) |
+| `server` | Server URL |
 | `ndiExtraIPs` | Comma-separated IPs for NDI discovery across subnets |
 | `links[].token` | Token of a user with the NDI bridge role |
-| `links[].talk` / `listen` | Channel names (or ids) |
-| `in.type` | `ndi`, `card` (sound card), or `tone` (test beep) |
-| `in.device` | `card`: sound card input name, or part of it (`""` = default input) |
-| `in.source` | NDI source name. Matched exactly, or by a unique substring. |
-| `in.channels` | Which audio channels to mix to mono (0-based). NDI: empty = all. Card: empty = `[0]` |
-| `in.gainDb` | Input trim |
-| `in.gateDb` | Only talk while louder than this (e.g. `-45`). Omit for always-on feeds such as program. |
-| `in.holdMs` | Gate hold time (default 600) |
+| `links[].talk` / `listen` | Channel names or ids (`"Show: Channel"` if names repeat across shows) |
+| `in.type` / `out.type` | `ndi`, `card` (sound card), `tone` (test beep, in only) or `null` (out only, testing) |
+| `in.source` | NDI source name, exact or a unique part |
+| `in.device` / `out.device` | Sound card name or part of it, from `-devices` (`""` = default) |
+| `in.channels` | Channels to mix to mono, from 0. NDI: empty = all. Card: empty = `[0]` |
+| `out.channels` | Card outputs to play on, from 0. Empty = both sides of a stereo card |
+| `in.gainDb` / `out.gainDb` | Trim |
+| `in.gateDb`, `in.holdMs` | Only talk while louder than this; hold time (default 600 ms). Leave out for program feeds |
 | `in.music` | Encode for music (program) instead of speech |
-| `out.type` | `ndi`, `card` (sound card), or `null` (testing) |
-| `out.device` | `card`: sound card output name, or part of it (`""` = default output) |
-| `out.channels` | `card`: outputs to play on (0-based); empty = both sides of a stereo card |
 | `out.name` | Name of the NDI source the bridge publishes |
-| `out.gainDb` | Output trim |
-| `vmix.host` / `vmix.port` | vMix PC and TCP API port (default 8099) |
-| `vmix.token` | Token of an NDI-bridge user, used to publish tally |
-| `outputs.token` | Token of the user with the **channel outputs** role |
-| `outputs.ndiPrefix` | Start of each output's NDI source name (default `OpenLine`) |
-| `outputs.gainDb` | Trim for all channel outputs |
-| `outputs.card.device` | Sound card name (or part of it) from `openline-bridge -devices`; `""` = default output |
-| `outputs.card.latencyMs` | Sound card buffer (default 60) |
+| `vmix.host`, `vmix.port`, `vmix.token` | vMix PC, TCP API port (8099), an NDI-bridge user's token |
+| `outputs.token`, `outputs.ndiPrefix`, `outputs.gainDb` | Channel outputs login, NDI name prefix (`OpenLine`), trim |
+| `outputs.card.device`, `outputs.card.latencyMs` | Sound card for channel outputs, its buffer (default 60) |
 
-With several shows, a link's `talk` / `listen` can name a channel as `"Show name: Channel"` when the bridge user has channels with the same name in different shows.
-
-## Latency
-
-NDI receive (one audio block, 20–40 ms) + Opus encode (20 ms) + network + listener jitter buffer (≈60 ms). Program and announcer audio typically arrive in **150–300 ms**, well inside the 1 s target. On the way out, the bridge's own 60 ms jitter buffer adds to the NDI output.
-
-## Running as a service
-
-- Windows: use NSSM or Task Scheduler (*At startup*, run whether logged on or not).
-- macOS: a launchd plist.
-- Linux: a systemd unit like `deploy/openline.service`.
-
-The bridge reconnects automatically if the server, the network or an NDI source drops.
-
-*NDI® is a registered trademark of Vizrt NDI AB. The bridge loads the NDI runtime installed on the machine; it does not ship the NDI SDK.*
+*NDI® is a registered trademark of Vizrt NDI AB. The bridge uses the NDI runtime installed on the machine; it doesn't include the NDI SDK.*

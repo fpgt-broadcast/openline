@@ -255,6 +255,37 @@ function renderAll() {
   renderChannels(); renderPTT(); renderBanner(); renderTallyView();
   if (S.sheet && S.sheet.kind === 'channel') renderChannelSheet(S.sheet.id);
   syncBelt();
+  updateNowPlaying();
+}
+
+// Lock screen / Control Center "now playing" card (background audio or the
+// headphone-button option): what you're doing, who you are, which server.
+let nowPlayingKey = '';
+function updateNowPlaying() {
+  if (!('mediaSession' in navigator) || !S.welcome || !(S.audio?.bgEl || S.mediaEl)) return;
+  const names = (ids) => [...ids].map((id) => chan(id)?.name).filter(Boolean).join(' + ');
+  let title;
+  if (S.muted) title = 'Mic muted by the director';
+  else if (S.talk.size) title = 'Talking on ' + names(S.talk);
+  else {
+    const heard = [];
+    for (const ch of S.channels) {
+      if (ch.program || !S.listen.has(ch.id)) continue;
+      for (const t of S.state.get(ch.id)?.talkers || []) if (t.sid !== S.welcome.sid) heard.push(`${t.person || t.name} on ${ch.name}`);
+    }
+    title = heard.length ? heard.slice(0, 2).join(', ') + (heard.length > 2 ? ' …' : '')
+      : S.targets.size ? 'Ready to talk on ' + names(S.targets) : 'Listening';
+  }
+  const artist = S.welcome.user + (S.effectivePerson ? ' · ' + S.effectivePerson : '');
+  const shows = [...new Set(S.channels.map((c) => c.show).filter(Boolean))];
+  const album = S.welcome.server + (shows.length ? ' · ' + shows.join(' + ') : '');
+  const key = [title, artist, album].join('|');
+  if (key === nowPlayingKey) return;
+  nowPlayingKey = key;
+  navigator.mediaSession.metadata = new MediaMetadata({ title, artist, album, artwork: [
+    { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
+    { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
+  ] });
 }
 
 function renderChannels() {
@@ -473,17 +504,17 @@ async function openSettings() {
       h('button', { style: { marginTop: '8px', width: '100%' }, onclick: () => { closeSheet(); openGuide(0); } }, 'Show quick start guide'),
       h('h3', {}, 'Headphone button'),
       h('label', {}, h('input', { type: 'checkbox', checked: store.get('mediaPTT', false), onchange: (e) => { store.set('mediaPTT', e.target.checked); setupMediaPTT(); } }),
-        ' Headphone play/pause button toggles talk (AirPods stem press, headset button). Experimental — depends on browser/OS.'),
-      h('h3', {}, 'Background audio (experimental)'),
-      h('label', {}, h('input', { type: 'checkbox', checked: store.get('bgAudio', false), onchange: (e) => {
+        ' Headphone play/pause button toggles talk (AirPods stem press, headset button, lock-screen play/pause).'),
+      h('h3', {}, 'Background audio'),
+      h('label', {}, h('input', { type: 'checkbox', checked: bgAudioOn(), onchange: (e) => {
         store.set('bgAudio', e.target.checked); bglog('background audio ' + (e.target.checked ? 'on' : 'off'));
         S.audio?.setBackground(e.target.checked); setupMediaPTT();
-      } }), ' Keep listening with the screen locked or in another app. Plays through the phone\'s media player, which can add a little delay.'),
-      h('div', { class: 'small muted' }, 'Test log, newest first. It keeps going while the app is in the background, so gaps show when the phone paused it.'),
-      h('pre', { id: 'bgLogBox', class: 'bglog' }, bgLogText()),
-      h('div', { class: 'grid2' },
-        h('button', { onclick: () => navigator.clipboard.writeText(bgLog.join('\n')).then(() => banner('Log copied', 'warn', 1500), () => banner('Could not copy the log', 'bad', 2000)) }, 'Copy log'),
-        h('button', { onclick: () => { bgLog.length = 0; store.del('bglog'); $('bgLogBox').textContent = ''; } }, 'Clear log')),
+      } }), ' Keep audio going with the screen locked or in another app (on by default on phones). On iPhone a locked phone can\'t send your mic: unlock to talk.'),
+      h('details', { class: 'small muted' }, h('summary', {}, 'Background log (for troubleshooting)'),
+        h('pre', { id: 'bgLogBox', class: 'bglog' }, bgLogText()),
+        h('div', { class: 'grid2' },
+          h('button', { onclick: () => navigator.clipboard.writeText(bgLog.join('\n')).then(() => banner('Log copied', 'warn', 1500), () => banner('Could not copy the log', 'bad', 2000)) }, 'Copy log'),
+          h('button', { onclick: () => { bgLog.length = 0; store.del('bglog'); $('bgLogBox').textContent = ''; } }, 'Clear log'))),
       h('h3', {}, 'Keyboard / foot pedal'),
       h('div', { class: 'small muted' }, 'Space: hold to talk / tap to latch · 1–9: toggle talk target · C: hold to call. USB foot pedals that send Space work as a PTT.'),
       h('div', { class: 'grid2' },
@@ -613,7 +644,8 @@ function setupMediaPTT() {
     const g = S.audio.ctx.createGain(); g.gain.value = 0; g.connect(dest);
     S.mediaEl = new Audio(); S.mediaEl.srcObject = dest.stream; S.mediaEl.play().catch(() => {});
   }
-  navigator.mediaSession.metadata = new MediaMetadata({ title: 'OpenLine intercom', artist: S.welcome?.user || '' });
+  nowPlayingKey = '';
+  updateNowPlaying();
   const toggle = () => {
     if (on) {
       if (S.talk.size > 0) { S.latched = false; setTalkTargets(false); }
@@ -626,7 +658,11 @@ function setupMediaPTT() {
   navigator.mediaSession.playbackState = 'playing';
 }
 
-// ---------------- background test log ----------------
+// Phones and tablets pause web audio in the background; desktops don't, so
+// background audio is on by default only on touch devices.
+function bgAudioOn() { return store.get('bgAudio', matchMedia('(pointer: coarse)').matches); }
+
+// ---------------- background log ----------------
 // Kept in localStorage so it survives iOS reloading a page it had suspended.
 const bgLog = store.get('bglog', []);
 function bglog(text) {
@@ -659,7 +695,7 @@ async function ensureAudio() {
     a.onMicLevel = (p) => { mic.style.width = Math.min(100, p * 160).toFixed(0) + '%'; };
     a.onLevels = (lv) => { S.sidLevel = lv; };
     a.onEvent = bglog;
-    await a.start({ micId: store.get('mic', ''), echoCancel: store.get('aec', true), background: store.get('bgAudio', false) });
+    await a.start({ micId: store.get('mic', ''), echoCancel: store.get('aec', true), background: bgAudioOn() });
     a.setJitter(store.get('jitter', 60));
     if (store.get('out', '')) a.setOutput(store.get('out', '')).catch(() => {});
     S.audio = a;
@@ -725,7 +761,7 @@ const GUIDE = [
   { title: 'Calls and tally', sel: '#callBtn', pos: 'top',
     text: 'Hold CALL to flash the channels you talk to. A flashing yellow row means someone is calling you. A red ON AIR bar means your camera is live.' },
   { title: 'Keep it connected', sel: '#menuBtn', pos: 'bottom',
-    text: 'Keep this app open with the screen on (it stays awake by itself). If you switch apps it reconnects when you come back. On iPhone: Share → Add to Home Screen. Menu has your mic, headphones, beltpack and this guide.' },
+    text: 'You keep hearing everyone with the phone locked or in another app. On iPhone, unlock to talk (a locked iPhone mutes the mic). Tip: Share → Add to Home Screen gives a full-screen app. Menu has your mic, headphones, beltpack and this guide.' },
 ];
 
 function openGuide(step = 0) {

@@ -400,9 +400,9 @@ func defaultConfig(adminPass string) Config {
 			{ID: 6, Name: "Announcers", Color: "#a66ef0"},
 		},
 		Users: []User{
-			{Name: "Director", PIN: "1111", Admin: true, Channels: append(all(true, 1, 6, 2, 3, 4), Access{Ch: 5, Listen: true})},
-			{Name: "Camera 1", PIN: "2222", Channels: append(all(true, 2, 1), Access{Ch: 5, Listen: true})},
-			{Name: "A1", PIN: "3333", Channels: append(all(true, 3, 1), Access{Ch: 5, Listen: true})},
+			{Name: "Director", PIN: randPIN(), Admin: true, Channels: append(all(true, 1, 6, 2, 3, 4), Access{Ch: 5, Listen: true})},
+			{Name: "Camera 1", PIN: randPIN(), Channels: append(all(true, 2, 1), Access{Ch: 5, Listen: true})},
+			{Name: "A1", PIN: randPIN(), Channels: append(all(true, 3, 1), Access{Ch: 5, Listen: true})},
 			{Name: "Program Feed", Bridge: true, Channels: []Access{{Ch: 5, Talk: true}}},
 			// NDI link to the announce booth: their talkback in, IFB (this channel) out.
 			{Name: "Announcer Link", Bridge: true, Channels: []Access{{Ch: 6, Talk: true, Listen: true}}},
@@ -479,6 +479,15 @@ func hashPass(p string) string {
 		panic(err)
 	}
 	return string(h)
+}
+
+// randPIN is a random 6-digit PIN for the starter users, so a fresh server on
+// the internet has no guessable logins.
+func randPIN() string {
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	n := (uint32(b[0])<<24 | uint32(b[1])<<16 | uint32(b[2])<<8 | uint32(b[3])) % 1000000
+	return fmt.Sprintf("%06d", n)
 }
 
 func randHex(n int) string {

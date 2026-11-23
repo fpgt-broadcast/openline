@@ -29,6 +29,7 @@ func newHarness(t *testing.T) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
+	setTestPINs(t, store)
 	srv := New(store, fstest.MapFS{"index.html": {Data: []byte("hi")}})
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
@@ -113,6 +114,22 @@ func (h *harness) connect(hello proto.Msg) (*client.Client, *recorder) {
 	h.t.Cleanup(cancel)
 	go c.Run(ctx)
 	return c, r
+}
+
+// setTestPINs gives the (randomly PIN'd) starter users fixed PINs for tests.
+func setTestPINs(t *testing.T, store *Store) {
+	t.Helper()
+	pins := map[string]string{"Director": "1111", "Camera 1": "2222", "A1": "3333"}
+	if _, err := store.Update(func(c *Config) error {
+		for i := range c.Users {
+			if p, ok := pins[c.Users[i].Name]; ok {
+				c.Users[i].PIN = p
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func eventually(t *testing.T, what string, f func() bool) {
@@ -459,5 +476,20 @@ func TestSecurityHeadersAndNoTokenInURL(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != 401 {
 		t.Fatalf("admin token accepted in the URL: %d", resp.StatusCode)
+	}
+}
+
+func TestFreshServerHasRandomPINs(t *testing.T) {
+	store, _, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range store.Get().Users {
+		if u.PIN == "" {
+			continue
+		}
+		if len(u.PIN) != 6 || u.PIN == "111111" || strings.Trim(u.PIN, "0123456789") != "" {
+			t.Fatalf("starter PIN for %s = %q, want 6 random digits", u.Name, u.PIN)
+		}
 	}
 }

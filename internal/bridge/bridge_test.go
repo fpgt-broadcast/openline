@@ -51,6 +51,9 @@ func setup(t *testing.T) (*httptest.Server, *server.Store) {
 			if c.Users[i].Name == "Announcer Link" {
 				c.Users[i].Token = "boothtoken0123456789"
 			}
+			if c.Users[i].Name == "Director" {
+				c.Users[i].PIN = "1111" // starter PINs are random
+			}
 		}
 		c.Users = append(c.Users,
 			server.User{Name: "IFB Out", Bridge: true, Token: "ifbtoken012345678901", Channels: []server.Access{{Ch: 1, Listen: true}}},

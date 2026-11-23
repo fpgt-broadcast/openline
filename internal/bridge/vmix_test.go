@@ -63,6 +63,7 @@ func TestVMixTallyReachesUsers(t *testing.T) {
 		for i := range c.Users {
 			if c.Users[i].Name == "Camera 1" {
 				c.Users[i].Tally = []int{2}
+				c.Users[i].PIN = "2222" // starter PINs are random
 			}
 		}
 		return nil
@@ -147,6 +148,7 @@ func TestVMixInitialTallyQuery(t *testing.T) {
 		for i := range c.Users {
 			if c.Users[i].Name == "Camera 1" {
 				c.Users[i].Tally = []int{3}
+				c.Users[i].PIN = "2222" // starter PINs are random
 			}
 		}
 		return nil

@@ -8,11 +8,14 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>OpenLine Intercom</title>
 <link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
 <div id="login" class="center hidden">
   <form class="card" id="loginForm" autocomplete="on">
+    <img class="logo" src="icon.svg" alt="" width="48" height="48">
     <h1 id="loginTitle">OpenLine</h1>
     <div class="muted small">Sign in with your name and PIN, or open the invite link you were sent.</div>
     <label for="lu">Name</label>
@@ -29,6 +32,7 @@
 
 <div id="start" class="center hidden">
   <div class="card">
+    <img class="logo" src="icon.svg" alt="" width="48" height="48">
     <h1>Ready</h1>
     <div class="muted small" id="startInfo"></div>
     <label for="sname">Your name (optional)</label>
@@ -40,6 +44,7 @@
 
 <div id="app" class="hidden">
   <header class="top">
+    <img class="logo" src="icon.svg" alt="OpenLine" width="24" height="24">
     <div class="who"><b id="hUser"></b> <span class="muted small" id="hServer"></span></div>
     <span class="dot" id="hDot"></span>
     <span class="small muted" id="hRtt">–</span>

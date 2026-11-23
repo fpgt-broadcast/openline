@@ -41,6 +41,6 @@ IDF_COMPONENT_MANAGER=0 idf.py -DEXTRA_COMPONENT_DIRS="/opt/esp/extra/iec/led_st
 
 1. On first boot the screen shows `BT SETUP`.
 2. Either pair from the app (**Menu → Connect beltpack**) to use it over Bluetooth, or go to **Admin → Beltpacks → Set up beltpack via Bluetooth** and enter Wi‑Fi or Ethernet details plus the server URL.
-3. A beltpack without a user appears in Admin as *unassigned*. Pick a user there, and the beltpack receives that user's token and reconnects.
+3. If you didn't pick a user during setup, turn on **Admin → Beltpacks → Accept new beltpacks**: the beltpack shows up there. Pick a user, and it receives that user's token and reconnects.
 
 To get back into setup, hold the encoder while powering on, or use **Menu → BT SETUP**.
