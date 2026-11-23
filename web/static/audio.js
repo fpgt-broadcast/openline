@@ -16,6 +16,11 @@ export function codecSupport() {
   return typeof AudioEncoder !== 'undefined' && typeof AudioDecoder !== 'undefined';
 }
 
+// Safari 17+: tell iOS this page is a two-way voice call rather than media.
+function setAudioSessionType(call) {
+  try { if (navigator.audioSession) navigator.audioSession.type = call ? 'play-and-record' : 'auto'; } catch {}
+}
+
 export class AudioEngine {
   constructor() {
     this.ctx = null;
@@ -28,13 +33,19 @@ export class AudioEngine {
     this.seq = 0;
     this.encTs = 0;
     this.micStream = null;
+    this.onEvent = null;        // (text) => void   (background test log)
+    this.bgEl = null;           // <audio> playing the mix when background playback is on
   }
 
-  async start({ micId, echoCancel = true } = {}) {
+  event(text) { if (this.onEvent) this.onEvent(text); }
+
+  async start({ micId, echoCancel = true, background = false } = {}) {
     const insecure = insecureMessage();
     if (insecure) throw new Error(insecure);
     if (!codecSupport()) throw new Error('This browser lacks WebCodecs audio (use current Chrome, Edge, Firefox or Safari 26+).');
+    setAudioSessionType(background);
     this.ctx = new AudioContext({ sampleRate: SR, latencyHint: 'interactive' });
+    this.ctx.addEventListener('statechange', () => this.event('audio ' + this.ctx.state));
     await this.ctx.audioWorklet.addModule('worklets.js');
 
     this.player = new AudioWorkletNode(this.ctx, 'ol-player', { numberOfInputs: 0, outputChannelCount: [1] });
@@ -61,7 +72,36 @@ export class AudioEngine {
       if (this.onUplink) this.onUplink(f);
     });
     await this.setMic(micId, echoCancel);
+    this.setBackground(background);
     if (this.ctx.state !== 'running') await this.ctx.resume();
+  }
+
+  // Background playback: play the mix through a hidden <audio> element instead
+  // of straight out of Web Audio. iOS keeps a page running in the background
+  // more readily while a media element is playing.
+  setBackground(on) {
+    setAudioSessionType(on);
+    if (!this.ctx || on === !!this.bgEl) return;
+    this.outGain.disconnect();
+    if (on) {
+      const dest = this.ctx.createMediaStreamDestination();
+      this.outGain.connect(dest);
+      const el = new Audio();
+      el.srcObject = dest.stream;
+      for (const ev of ['pause', 'playing', 'stalled', 'ended']) el.addEventListener(ev, () => this.event('player ' + ev));
+      this.bgEl = el;
+      if (this.sinkId && el.setSinkId) el.setSinkId(this.sinkId).catch(() => {});
+      this.ensurePlaying();
+    } else {
+      this.bgEl.pause();
+      this.bgEl.srcObject = null;
+      this.bgEl = null;
+      this.outGain.connect(this.ctx.destination);
+    }
+  }
+
+  ensurePlaying() {
+    if (this.bgEl && this.bgEl.paused) this.bgEl.play().catch((e) => this.event('player play failed: ' + e.name));
   }
 
   makeEncoder(bitrate, onBytes) {
@@ -95,12 +135,16 @@ export class AudioEngine {
       },
     });
     // iOS ends the mic track when the page is backgrounded; the app re-opens it on return.
+    const track = this.micStream.getAudioTracks()[0];
+    if (track) for (const ev of ['mute', 'unmute', 'ended']) track.addEventListener(ev, () => this.event('mic ' + ev));
     this.micSrc = this.ctx.createMediaStreamSource(this.micStream);
     this.micSrc.connect(this.capture);
   }
 
   async setOutput(deviceId) {
-    if (this.ctx && this.ctx.setSinkId) await this.ctx.setSinkId(deviceId || '');
+    this.sinkId = deviceId || '';
+    if (this.bgEl && this.bgEl.setSinkId) await this.bgEl.setSinkId(this.sinkId);
+    if (this.ctx && this.ctx.setSinkId) await this.ctx.setSinkId(this.sinkId);
   }
 
   setMonitor(on) { if (this.outGain) this.outGain.gain.value = on ? 1 : 0; }
@@ -167,6 +211,7 @@ export class AudioEngine {
     for (const d of this.decoders.values()) try { d.dec.close(); } catch {}
     this.decoders.clear();
     if (this.micStream) this.micStream.getTracks().forEach((t) => t.stop());
+    if (this.bgEl) { this.bgEl.pause(); this.bgEl.srcObject = null; this.bgEl = null; }
     try { this.enc && this.enc.close(); } catch {}
     if (this.ctx) await this.ctx.close();
     this.ctx = null;

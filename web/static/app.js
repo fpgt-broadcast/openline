@@ -49,7 +49,7 @@ function connect() {
   ws.binaryType = 'arraybuffer';
   S.ws = ws;
   setDot('warn');
-  ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', ver: 1, client: 'web', name: S.person || undefined, ...S.creds }));
+  ws.onopen = () => { bglog('connected'); ws.send(JSON.stringify({ t: 'hello', ver: 1, client: 'web', name: S.person || undefined, ...S.creds })); };
   ws.onmessage = (e) => {
     if (typeof e.data !== 'string') return onAudio(e.data);
     let m; try { m = JSON.parse(e.data); } catch { return; }
@@ -57,6 +57,7 @@ function connect() {
   };
   ws.onclose = (e) => {
     if (S.ws !== ws) return;
+    bglog('disconnected (' + e.code + ')');
     setDot('bad');
     S.talk.clear();
     if (e.code === 4001 || (!S.everWelcomed && e.code !== 1006)) {
@@ -138,6 +139,7 @@ function onControl(m) {
 }
 
 function onAudio(buf) {
+  S.rxFrames = (S.rxFrames || 0) + 1;
   if (!S.audio || !S.audio.ctx) return;
   const dv = new DataView(buf);
   if (dv.byteLength < 10) return;
@@ -472,6 +474,16 @@ async function openSettings() {
       h('h3', {}, 'Headphone button'),
       h('label', {}, h('input', { type: 'checkbox', checked: store.get('mediaPTT', false), onchange: (e) => { store.set('mediaPTT', e.target.checked); setupMediaPTT(); } }),
         ' Headphone play/pause button toggles talk (AirPods stem press, headset button). Experimental — depends on browser/OS.'),
+      h('h3', {}, 'Background audio (experimental)'),
+      h('label', {}, h('input', { type: 'checkbox', checked: store.get('bgAudio', false), onchange: (e) => {
+        store.set('bgAudio', e.target.checked); bglog('background audio ' + (e.target.checked ? 'on' : 'off'));
+        S.audio?.setBackground(e.target.checked); setupMediaPTT();
+      } }), ' Keep listening with the screen locked or in another app. Plays through the phone\'s media player, which can add a little delay.'),
+      h('div', { class: 'small muted' }, 'Test log, newest first. It keeps going while the app is in the background, so gaps show when the phone paused it.'),
+      h('pre', { id: 'bgLogBox', class: 'bglog' }, bgLogText()),
+      h('div', { class: 'grid2' },
+        h('button', { onclick: () => navigator.clipboard.writeText(bgLog.join('\n')).then(() => banner('Log copied', 'warn', 1500), () => banner('Could not copy the log', 'bad', 2000)) }, 'Copy log'),
+        h('button', { onclick: () => { bgLog.length = 0; store.del('bglog'); $('bgLogBox').textContent = ''; } }, 'Clear log')),
       h('h3', {}, 'Keyboard / foot pedal'),
       h('div', { class: 'small muted' }, 'Space: hold to talk / tap to latch · 1–9: toggle talk target · C: hold to call. USB foot pedals that send Space work as a PTT.'),
       h('div', { class: 'grid2' },
@@ -585,28 +597,56 @@ function syncBelt(force = false) {
 // ---------------- headphone button as talk toggle ----------------
 // Media keys only reach a page that is "playing" media, so a silent stream is
 // played through an <audio> element and play/pause actions toggle latch-talk.
+// With background audio on, the real mix plays through the engine's <audio>
+// element instead, and the lock-screen play/pause keeps it playing (or toggles
+// talk when the headphone-button option is on too).
 function setupMediaPTT() {
-  const on = store.get('mediaPTT', false);
   if (!('mediaSession' in navigator) || !S.audio) return;
-  if (!on) {
+  const on = store.get('mediaPTT', false), bg = !!S.audio.bgEl;
+  if (S.mediaEl && (!on || bg)) { S.mediaEl.pause(); S.mediaEl = null; }
+  if (!on && !bg) {
     for (const a of ['play', 'pause', 'stop']) try { navigator.mediaSession.setActionHandler(a, null); } catch {}
-    if (S.mediaEl) { S.mediaEl.pause(); S.mediaEl = null; }
     return;
   }
-  if (!S.mediaEl) {
+  if (!bg && !S.mediaEl) {
     const dest = S.audio.ctx.createMediaStreamDestination();
     const g = S.audio.ctx.createGain(); g.gain.value = 0; g.connect(dest);
     S.mediaEl = new Audio(); S.mediaEl.srcObject = dest.stream; S.mediaEl.play().catch(() => {});
   }
   navigator.mediaSession.metadata = new MediaMetadata({ title: 'OpenLine intercom', artist: S.welcome?.user || '' });
   const toggle = () => {
-    if (S.talk.size > 0) { S.latched = false; setTalkTargets(false); }
-    else if (S.targets.size && !S.muted) { S.latched = true; setTalkTargets(true); }
+    if (on) {
+      if (S.talk.size > 0) { S.latched = false; setTalkTargets(false); }
+      else if (S.targets.size && !S.muted) { S.latched = true; setTalkTargets(true); }
+    }
+    S.audio?.ensurePlaying();
     navigator.mediaSession.playbackState = 'playing';
   };
   for (const a of ['play', 'pause', 'stop']) try { navigator.mediaSession.setActionHandler(a, toggle); } catch {}
   navigator.mediaSession.playbackState = 'playing';
 }
+
+// ---------------- background test log ----------------
+// Kept in localStorage so it survives iOS reloading a page it had suspended.
+const bgLog = store.get('bglog', []);
+function bglog(text) {
+  bgLog.push(new Date().toTimeString().slice(0, 8) + '  ' + text);
+  if (bgLog.length > 80) bgLog.splice(0, bgLog.length - 80);
+  store.set('bglog', bgLog);
+  const box = $('bgLogBox');
+  if (box) box.textContent = bgLogText();
+}
+function bgLogText() { return bgLog.slice().reverse().join('\n'); }
+// While in the background, note every 10 s how much audio came in and went out.
+// If the phone paused the page, these lines stop.
+setInterval(() => {
+  if (document.visibilityState === 'hidden') {
+    const ws = !S.ws ? 'none' : ['connecting', 'connected', 'closing', 'closed'][S.ws.readyState];
+    bglog(`in background: heard ${S.rxFrames || 0}, sent ${S.txFrames || 0} audio packets; ${ws}; audio ${S.audio?.ctx?.state || 'off'}` +
+      (S.audio?.bgEl ? (S.audio.bgEl.paused ? '; player paused' : '; player playing') : ''));
+  }
+  S.rxFrames = 0; S.txFrames = 0;
+}, 10000);
 
 // ---------------- startup ----------------
 async function ensureAudio() {
@@ -614,11 +654,12 @@ async function ensureAudio() {
   if (S.audioStarting) return S.audioStarting;
   S.audioStarting = (async () => {
     const a = new AudioEngine();
-    a.onUplink = (f) => { if (S.ws && S.ws.readyState === 1 && S.ws.bufferedAmount < 64000) S.ws.send(f); };
+    a.onUplink = (f) => { S.txFrames = (S.txFrames || 0) + 1; if (S.ws && S.ws.readyState === 1 && S.ws.bufferedAmount < 64000) S.ws.send(f); };
     const mic = $('hMic');
     a.onMicLevel = (p) => { mic.style.width = Math.min(100, p * 160).toFixed(0) + '%'; };
     a.onLevels = (lv) => { S.sidLevel = lv; };
-    await a.start({ micId: store.get('mic', ''), echoCancel: store.get('aec', true) });
+    a.onEvent = bglog;
+    await a.start({ micId: store.get('mic', ''), echoCancel: store.get('aec', true), background: store.get('bgAudio', false) });
     a.setJitter(store.get('jitter', 60));
     if (store.get('out', '')) a.setOutput(store.get('out', '')).catch(() => {});
     S.audio = a;
@@ -644,19 +685,24 @@ async function resumeAfterBackground() {
   if (!S.audio) return;
   wakeLock();
   try { if (S.audio.ctx.state !== 'running') await S.audio.ctx.resume(); } catch {}
+  S.audio.ensurePlaying();
   const track = S.audio.micStream && S.audio.micStream.getAudioTracks()[0];
   if (!S.belt && store.get('mic', '') !== 'none' && (!track || track.readyState === 'ended' || track.muted)) {
     try { await S.audio.setMic(store.get('mic', ''), store.get('aec', true)); banner('Microphone restarted', 'warn', 2000); }
     catch (e) { banner('Tap anywhere to re-enable the microphone', 'warn'); S.needMic = true; }
   }
 }
-document.addEventListener('visibilitychange', resumeAfterBackground);
+document.addEventListener('visibilitychange', () => { bglog(document.visibilityState === 'hidden' ? 'went to background' : 'back on screen'); resumeAfterBackground(); });
+window.addEventListener('pagehide', () => bglog('page hidden'));
+document.addEventListener('freeze', () => bglog('page frozen'));
+document.addEventListener('resume', () => bglog('page unfrozen'));
 window.addEventListener('pageshow', resumeAfterBackground);
 window.addEventListener('focus', resumeAfterBackground);
 // iOS may refuse to restart audio without a tap after an interruption (call, Siri…)
 document.addEventListener('pointerdown', () => {
   if (!S.audio) return;
   if (S.audio.ctx.state !== 'running') S.audio.ctx.resume().catch(() => {});
+  S.audio.ensurePlaying();
   if (S.needMic) { S.needMic = false; resumeAfterBackground(); }
 }, true);
 
@@ -779,4 +825,5 @@ function init() {
   if (S.creds) connect(); else showLogin($('loginErr').textContent);
 }
 
+bglog('app opened');
 init();
