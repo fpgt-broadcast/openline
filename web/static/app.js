@@ -255,6 +255,37 @@ function renderAll() {
   renderChannels(); renderPTT(); renderBanner(); renderTallyView();
   if (S.sheet && S.sheet.kind === 'channel') renderChannelSheet(S.sheet.id);
   syncBelt();
+  updateNowPlaying();
+}
+
+// Lock screen / Control Center "now playing" card (background audio or the
+// headphone-button option): what you're doing, who you are, which server.
+let nowPlayingKey = '';
+function updateNowPlaying() {
+  if (!('mediaSession' in navigator) || !S.welcome || !(S.audio?.bgEl || S.mediaEl)) return;
+  const names = (ids) => [...ids].map((id) => chan(id)?.name).filter(Boolean).join(' + ');
+  let title;
+  if (S.muted) title = 'Mic muted by the director';
+  else if (S.talk.size) title = 'Talking on ' + names(S.talk);
+  else {
+    const heard = [];
+    for (const ch of S.channels) {
+      if (ch.program || !S.listen.has(ch.id)) continue;
+      for (const t of S.state.get(ch.id)?.talkers || []) if (t.sid !== S.welcome.sid) heard.push(`${t.person || t.name} on ${ch.name}`);
+    }
+    title = heard.length ? heard.slice(0, 2).join(', ') + (heard.length > 2 ? ' …' : '')
+      : S.targets.size ? 'Ready to talk on ' + names(S.targets) : 'Listening';
+  }
+  const artist = S.welcome.user + (S.effectivePerson ? ' · ' + S.effectivePerson : '');
+  const shows = [...new Set(S.channels.map((c) => c.show).filter(Boolean))];
+  const album = S.welcome.server + (shows.length ? ' · ' + shows.join(' + ') : '');
+  const key = [title, artist, album].join('|');
+  if (key === nowPlayingKey) return;
+  nowPlayingKey = key;
+  navigator.mediaSession.metadata = new MediaMetadata({ title, artist, album, artwork: [
+    { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
+    { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
+  ] });
 }
 
 function renderChannels() {
@@ -613,7 +644,8 @@ function setupMediaPTT() {
     const g = S.audio.ctx.createGain(); g.gain.value = 0; g.connect(dest);
     S.mediaEl = new Audio(); S.mediaEl.srcObject = dest.stream; S.mediaEl.play().catch(() => {});
   }
-  navigator.mediaSession.metadata = new MediaMetadata({ title: 'OpenLine intercom', artist: S.welcome?.user || '' });
+  nowPlayingKey = '';
+  updateNowPlaying();
   const toggle = () => {
     if (on) {
       if (S.talk.size > 0) { S.latched = false; setTalkTargets(false); }

@@ -6,10 +6,12 @@
 <meta name="theme-color" content="#101215">
 <title>OpenLine Admin</title>
 <link rel="stylesheet" href="app.css">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 </head>
 <body>
 <div id="login" class="center">
   <form class="card" id="loginForm">
+    <img class="logo" src="icon.svg" alt="" width="48" height="48">
     <h1>Admin</h1>
     <div class="muted small">Admin password (printed on first server start), or an admin user's name + PIN.</div>
     <label for="ap">Admin password</label>
@@ -24,6 +26,7 @@
 </div>
 <div id="main" class="admin hidden">
   <div class="row">
+    <img class="logo" src="icon.svg" alt="OpenLine" width="24" height="24">
     <h1 class="grow" style="font-size:18px;margin:0" id="title">OpenLine Admin</h1>
     <select id="showSel" class="hidden" aria-label="Show you are editing" style="width:auto;min-width:120px"></select>
     <span id="dirty" class="pill warn hidden">unsaved changes</span>

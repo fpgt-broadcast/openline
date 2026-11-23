@@ -7,6 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>OpenLine Admin (phone)</title>
 <link rel="stylesheet" href="app.css">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 <style>
   #m { display: flex; flex-direction: column; height: 100%; max-width: 560px; margin: 0 auto; }
   #m header { display: flex; align-items: center; gap: 8px; padding: calc(8px + env(safe-area-inset-top)) 12px 8px; border-bottom: 1px solid var(--line); }
@@ -40,6 +41,7 @@
 <body>
 <div id="login" class="center">
   <form class="card" id="loginForm">
+    <img class="logo" src="icon.svg" alt="" width="48" height="48">
     <h1>Admin</h1>
     <div class="muted small">Sign in with your name + PIN (admin users), or the admin password.</div>
     <label for="au">Name</label>
@@ -56,6 +58,7 @@
 </div>
 <div id="m" class="hidden">
   <header>
+    <img class="logo" src="icon.svg" alt="OpenLine" width="24" height="24">
     <b class="grow" id="title">Admin</b>
     <span class="small muted" id="count"></span>
     <a class="small" href="admin.html">Full admin</a>
