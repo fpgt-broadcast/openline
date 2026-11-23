@@ -62,6 +62,38 @@ type Hub struct {
 	nextSID  uint16
 
 	tallyPgm, tallyPvw map[int]bool // switcher inputs on program / preview
+
+	// pairUntil: new (unassigned) beltpacks may connect without a token only
+	// until this time. The admin opens the window from the Devices tab.
+	pairUntil time.Time
+}
+
+// maxPending caps how many unassigned beltpacks can be connected at once.
+const maxPending = 16
+
+var ErrPairingClosed = errors.New("new beltpacks are not accepted right now: open \"Accept new beltpacks\" in admin > Beltpacks")
+
+// SetPairing opens the new-beltpack window for d (0 closes it) and returns
+// when it closes.
+func (h *Hub) SetPairing(d time.Duration) time.Time {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if d <= 0 {
+		h.pairUntil = time.Time{}
+	} else {
+		h.pairUntil = time.Now().Add(d)
+	}
+	return h.pairUntil
+}
+
+// Pairing returns when the new-beltpack window closes (zero if closed).
+func (h *Hub) Pairing() time.Time {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if time.Now().After(h.pairUntil) {
+		return time.Time{}
+	}
+	return h.pairUntil
 }
 
 func NewHub(store *Store) *Hub {
@@ -70,9 +102,52 @@ func NewHub(store *Store) *Hub {
 
 var ErrAuth = errors.New("login failed")
 
-// Authenticate resolves a hello message to a user. A beltpack that sends only
-// its device id (no token) is accepted as an unassigned device so an admin
-// can adopt it; it gets no channels until assigned.
+// Admit checks a WebSocket hello. Besides name + PIN and token logins, a
+// beltpack that sends only its device id (no token) is let in as an unassigned
+// device so an admin can adopt it, but only while the admin has the
+// new-beltpack window open, only one connection per device id, and at most
+// maxPending at once. A token login that names a device must be the user that
+// device is assigned to, so nobody can take over a known beltpack's slot (and
+// the token or Wi-Fi password the admin later sends it).
+func (h *Hub) Admit(m proto.Msg) (User, error) {
+	dev := normDeviceID(m.Device)
+	if m.Token == "" && m.User == "" {
+		if dev == "" || m.Client != "beltpack" {
+			return User{}, ErrAuth
+		}
+		h.mu.RLock()
+		defer h.mu.RUnlock()
+		if time.Now().After(h.pairUntil) {
+			return User{}, ErrPairingClosed
+		}
+		pending := 0
+		for _, s := range h.sessions {
+			if s.user.ID == "" {
+				pending++
+				if s.DeviceID == dev {
+					return User{}, errors.New("this beltpack is already connected")
+				}
+			}
+		}
+		if pending >= maxPending {
+			return User{}, errors.New("too many new beltpacks waiting: assign or remove some in admin > Beltpacks")
+		}
+		return User{Name: "Unassigned"}, nil
+	}
+	u, err := h.Authenticate(m)
+	if err != nil {
+		return u, err
+	}
+	if dev != "" && m.Token != "" {
+		cfg := h.store.Get()
+		if d := cfg.device(dev); d != nil && d.UserID != "" && d.UserID != u.ID {
+			return User{}, ErrAuth
+		}
+	}
+	return u, nil
+}
+
+// Authenticate resolves name + PIN or a token to a user.
 func (h *Hub) Authenticate(m proto.Msg) (User, error) {
 	cfg := h.store.Get()
 	if m.Token != "" {
@@ -97,9 +172,6 @@ func (h *Hub) Authenticate(m proto.Msg) (User, error) {
 		}
 		return User{}, ErrAuth
 	}
-	if m.Device != "" && m.Client == "beltpack" {
-		return User{Name: "Unassigned"}, nil
-	}
 	return User{}, ErrAuth
 }
 
@@ -109,10 +181,14 @@ func (h *Hub) Join(u User, hello proto.Msg, remote string) *Session {
 	if client == "" {
 		client = "unknown"
 	}
+	devID := normDeviceID(hello.Device)
+	if u.ID != "" && hello.Token == "" {
+		devID = "" // name + PIN logins are people, not beltpacks
+	}
 	s := &Session{
 		Client:    client,
 		Remote:    remote,
-		DeviceID:  normDeviceID(hello.Device),
+		DeviceID:  devID,
 		devPerson: cleanPerson(hello.Name),
 		Connected: time.Now(),
 		hub:       h,
@@ -123,24 +199,29 @@ func (h *Hub) Join(u User, hello proto.Msg, remote string) *Session {
 		call:      map[int]bool{},
 	}
 	var dev *Device
-	if s.DeviceID != "" {
+	if s.DeviceID != "" && u.ID != "" {
+		// Token login from a beltpack: remember it (Admit checked it may use this id).
 		cfg, err := h.store.Update(func(c *Config) error {
 			d := c.device(s.DeviceID)
 			if d == nil {
-				c.Devices = append(c.Devices, Device{ID: s.DeviceID, Net: NetConfig{Mode: "wifi", DHCP: true}, Audio: defaultDeviceAudio()})
+				c.Devices = append(c.Devices, newDevice(s.DeviceID))
 				d = &c.Devices[len(c.Devices)-1]
 			}
-			if u.ID != "" {
-				d.UserID = u.ID
-			}
+			d.UserID = u.ID
 			return nil
 		})
 		if err == nil {
 			dev = cfg.device(s.DeviceID)
-			if u.ID == "" && dev != nil {
-				u.Name = dev.Name + " (unassigned)"
-			}
 		}
+	} else if s.DeviceID != "" {
+		// New, unassigned beltpack: kept in memory only until an admin adopts it,
+		// so anonymous connections can't fill the saved config.
+		cfg := h.store.Get()
+		if dev = cfg.device(s.DeviceID); dev == nil {
+			d := newDevice(s.DeviceID)
+			dev = &d
+		}
+		u.Name = dev.Name + " (unassigned)"
 	}
 	cfg := h.store.Get()
 	h.mu.Lock()
@@ -187,6 +268,14 @@ func (s *Session) personLocked() string {
 func settingsMsg(d *Device) proto.Settings {
 	return proto.Settings{T: "settings", Name: d.Name, MicType: d.Audio.MicType, MicGain: d.Audio.MicGain,
 		Sidetone: d.Audio.Sidetone, HPLevel: d.Audio.HPLevel, Bright: d.Audio.Bright}
+}
+
+func newDevice(id string) Device {
+	return Device{ID: id, Name: defaultDeviceName(id), Net: NetConfig{Mode: "wifi", DHCP: true}, Audio: defaultDeviceAudio()}
+}
+
+func defaultDeviceName(id string) string {
+	return "Beltpack " + strings.ToUpper(id[max(0, len(id)-4):])
 }
 
 func normDeviceID(id string) string {
@@ -721,6 +810,7 @@ type DeviceInfo struct {
 	Remote    string           `json:"remote,omitempty"`
 	Telemetry *proto.Telemetry `json:"telemetry,omitempty"`
 	Session   *SessionInfo     `json:"session,omitempty"`
+	Pending   bool             `json:"pending,omitempty"` // connected, not adopted yet (not saved)
 }
 
 func (h *Hub) Devices() []DeviceInfo {
@@ -734,6 +824,14 @@ func (h *Hub) Devices() []DeviceInfo {
 		}
 	}
 	out := []DeviceInfo{}
+	for _, s := range h.sessions {
+		if s.DeviceID != "" && s.user.ID == "" && cfg.device(s.DeviceID) == nil {
+			info := s.infoLocked()
+			out = append(out, DeviceInfo{Device: newDevice(s.DeviceID), Pending: true, Online: true, SID: s.SID, Remote: s.Remote,
+				Telemetry: s.telemetry, Session: &info})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	for _, d := range cfg.Devices {
 		d.Net.Pass = ""
 		di := DeviceInfo{Device: d}
@@ -752,8 +850,14 @@ func (h *Hub) Devices() []DeviceInfo {
 // UpdateDevice saves name/user/audio settings and pushes them live.
 func (h *Hub) UpdateDevice(id string, name, userID string, audio DeviceAudio) (Device, error) {
 	var userChanged bool
+	live := h.deviceSession(id)
 	cfg, err := h.store.Update(func(c *Config) error {
 		d := c.device(id)
+		if d == nil && live != nil {
+			// adopting a new beltpack that is connected right now
+			c.Devices = append(c.Devices, newDevice(id))
+			d = &c.Devices[len(c.Devices)-1]
+		}
 		if d == nil {
 			return errors.New("no such device")
 		}
@@ -792,6 +896,9 @@ func (h *Hub) SetDeviceNet(id string, n NetConfig) (Device, error) {
 		if d == nil {
 			return errors.New("no such device")
 		}
+		if d.UserID == "" {
+			return errors.New("assign a user to this beltpack first; network settings are only sent to an assigned beltpack")
+		}
 		if n.Pass == "" {
 			n.Pass = d.Net.Pass // keep existing wifi password
 		}
@@ -802,7 +909,9 @@ func (h *Hub) SetDeviceNet(id string, n NetConfig) (Device, error) {
 		return Device{}, err
 	}
 	d := *cfg.device(id)
-	if s := h.deviceSession(id); s != nil {
+	// Only a beltpack signed in with its assigned user's token gets the
+	// settings (they include the Wi-Fi password).
+	if s := h.deviceSession(id); s != nil && s.user.ID != "" && s.user.ID == d.UserID {
 		s.sendJSON(proto.NetCfg{T: "netcfg", Mode: d.Net.Mode, DHCP: d.Net.DHCP, IP: d.Net.IP, Mask: d.Net.Mask,
 			Gateway: d.Net.Gateway, DNS: d.Net.DNS, SSID: d.Net.SSID, Pass: d.Net.Pass, Server: d.Net.Server})
 	}
@@ -811,6 +920,9 @@ func (h *Hub) SetDeviceNet(id string, n NetConfig) (Device, error) {
 }
 
 func (h *Hub) DeleteDevice(id string) error {
+	if s := h.deviceSession(id); s != nil && s.user.ID == "" {
+		h.Kick(s.SID)
+	}
 	_, err := h.store.Update(func(c *Config) error {
 		out := c.Devices[:0]
 		for _, d := range c.Devices {

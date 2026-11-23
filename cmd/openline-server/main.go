@@ -35,6 +35,7 @@ func main() {
 	keyFile := flag.String("key", "", "TLS key file (PEM)")
 	selfSigned := flag.Bool("self-signed", false, "serve HTTPS with an auto-generated certificate (LAN use without internet/domain; browsers warn once)")
 	resetAdmin := flag.String("reset-admin", "", "set a new admin password and exit")
+	trustedProxy := flag.String("trusted-proxy", "", "reverse proxies allowed to pass the client IP (CF-Connecting-IP / X-Forwarded-For), comma-separated IPs, CIDRs or host names, e.g. cloudflared. Loopback is always trusted")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
@@ -63,6 +64,9 @@ func main() {
 	}
 
 	srv := server.New(store, web.FS())
+	if *trustedProxy != "" {
+		srv.TrustProxies(strings.Split(*trustedProxy, ","))
+	}
 	h := srv.Handler()
 
 	banner(store, genPass, *listen, *domain, *certFile != "" || *selfSigned)

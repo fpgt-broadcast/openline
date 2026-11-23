@@ -235,11 +235,26 @@ function renderDevices() {
     fill(box, 
       h('div', { class: 'panel' },
         h('div', { class: 'row', style: { flexWrap: 'wrap' } },
-          h('div', { class: 'grow small muted' }, 'New beltpacks appear here as soon as they connect. Set one up over Bluetooth from this computer (Chrome/Edge), or provision it with only Wi‑Fi + server URL and assign a user here.'),
-          h('button', { onclick: openProvision, disabled: !bleSupported() }, 'Set up beltpack via Bluetooth'))),
+          h('div', { class: 'grow small muted' }, 'Set a beltpack up over Bluetooth from this computer (Chrome/Edge) with its user, and it connects straight away. A beltpack given only Wi‑Fi + server URL shows up here while you accept new beltpacks; then assign it a user.'),
+          h('button', { onclick: openProvision, disabled: !bleSupported() }, 'Set up beltpack via Bluetooth')),
+        h('div', { id: 'pairBox' })),
       A.devices.length ? grid : h('div', { class: 'muted' }, 'No beltpacks yet.'));
   }
+  $('pairBox').replaceChildren(pairRow());
   for (const d of A.devices) { const c = A.devCards.get(d.id); if (c) updateDevCard(c, d); }
+}
+
+// New beltpacks without a user may only connect while this is open, so nobody
+// on the internet can pose as a beltpack.
+function pairRow() {
+  const p = A.pairing || {};
+  const mins = p.open ? Math.ceil((p.secondsLeft || 0) / 60) : 0;
+  const set = (minutes) => run(async () => { A.pairing = await api('POST', 'pairing', { minutes }); renderDevices(); });
+  return h('div', { class: 'row', style: { flexWrap: 'wrap', marginTop: '10px' } },
+    h('div', { class: 'grow small' + (p.open ? '' : ' muted') }, p.open
+      ? `Accepting new beltpacks for ${mins <= 1 ? 'about a minute' : mins + ' more minutes'}. Turn the beltpack on, then assign it a user below.`
+      : 'Not accepting new beltpacks. Beltpacks that already have a user always connect.'),
+    p.open ? h('button', { onclick: set(0) }, 'Stop accepting') : h('button', { onclick: set(10) }, 'Accept new beltpacks (10 min)'));
 }
 
 function openProvision() {
@@ -299,7 +314,14 @@ function renderUsers() {
         h('button', { onclick: () => { A.editUser = u; renderUsers(); } }, 'Edit'),
         h('button', { onclick: () => { A.editUser = u; A.showInvite = true; renderUsers(); } }, 'Invite'))),
     )) : h('tr', {}, h('td', { colspan: 7, class: 'muted' }, 'No users in this show yet.')))));
-  fill($('tab-users'), 
+  // Anyone on the internet can try PINs, so short ones (and the demo PINs) are weak.
+  const weak = A.cfg.users.filter((u) => u.pin && (u.pin.length < 4 || ['1111', '2222', '3333', '1234', '0000'].includes(u.pin)));
+  const weakAdmin = A.cfg.users.filter((u) => u.admin && u.pin && u.pin.length < 6);
+  fill($('tab-users'),
+    weak.length ? h('div', { class: 'banner bad', style: { borderRadius: '8px', marginBottom: '8px' } },
+      `Easy-to-guess PIN for ${weak.map((u) => u.name).join(', ')}. This server is on the internet: give everyone their own PIN (6+ digits is best).`) : null,
+    weakAdmin.length ? h('div', { class: 'banner warn', style: { borderRadius: '8px', marginBottom: '8px' } },
+      `${weakAdmin.map((u) => u.name).join(', ')}: admin sign-in with a PIN needs 6 or more digits. Until then use the admin password.`) : null,
     h('div', { class: 'row', style: { marginBottom: '8px' } },
       h('div', { class: 'grow small muted' }, (multiShow() ? `Users in ${showName(show)}. ` : '') + 'Each user is a login for an assignment (e.g. Camera 1), a beltpack role, or an NDI bridge link. Person = who normally has it; a device can enter its own name, which wins for that device. vMix tally = the vMix input number(s) that person is on. Channel order = beltpack key order.'),
       h('button', { onclick: () => { const u = { name: 'New user ' + (users.length + 1), pin: '', channels: [], token: '', show }; A.cfg.users.push(u); A.editUser = u; setDirty(); renderUsers(); } }, 'Add user')),
@@ -365,8 +387,18 @@ function userEditor(u) {
     link ? h('div', { style: { marginTop: '12px' } },
       h('label', {}, u.bridge ? 'Bridge token (put in bridge.json)' : 'Invite link — opens the intercom already signed in'),
       h('input', { type: 'text', readOnly: true, value: u.bridge ? u.token : link, onclick: (e) => e.target.select() }),
-      !u.bridge && A.showInvite ? h('img', { class: 'qr', style: { marginTop: '8px' }, alt: 'QR code for invite link', src: `api/qr?k=${A.token}&text=${encodeURIComponent(link)}` }) : null)
+      !u.bridge && A.showInvite ? qrImg(link) : null)
       : h('div', { class: 'small muted', style: { marginTop: '8px' } }, 'Save to generate this user\'s invite link / token.'));
+}
+
+// The QR code is fetched with the admin token in a header, not in the image
+// URL, so the token never ends up in logs or browser history.
+function qrImg(text) {
+  const img = h('img', { class: 'qr', style: { marginTop: '8px' }, alt: 'QR code for invite link' });
+  img.onload = () => URL.revokeObjectURL(img.src);
+  fetch('api/qr?text=' + encodeURIComponent(text), { headers: { Authorization: 'Bearer ' + A.token } })
+    .then((r) => (r.ok ? r.blob() : null)).then((b) => { if (b) img.src = URL.createObjectURL(b); }).catch(() => {});
+  return img;
 }
 
 // ---------------- Channels ----------------
@@ -514,7 +546,7 @@ function renderTab() {
 }
 
 async function refresh() {
-  [A.sessions, A.devices] = await Promise.all([api('GET', 'sessions'), api('GET', 'devices')]);
+  [A.sessions, A.devices, A.pairing] = await Promise.all([api('GET', 'sessions'), api('GET', 'devices'), api('GET', 'pairing')]);
   if (A.tab === 'live') renderLive();
   if (A.tab === 'devices') renderDevices();
 }

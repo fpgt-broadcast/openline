@@ -7,10 +7,15 @@ services:
   openline:
     build: ..
     restart: unless-stopped
+    # Real visitor IPs come from the tunnel (for login rate limits).
+    command: ["-trusted-proxy", "cloudflared"]
     volumes:
       - ./data:/data
     ports:
-      - "8999:8999" # LAN access; remove if you only use the tunnel
+      # Only this computer can open http://localhost:8999 directly; everyone
+      # else comes through the tunnel (HTTPS). Use "8999:8999" for plain-HTTP
+      # LAN access, which skips Cloudflare.
+      - "127.0.0.1:8999:8999"
   cloudflared:
     # "latest" tracks Cloudflare's supported release (versions expire after ~1 year).
     # Update with: docker compose pull cloudflared && docker compose up -d
