@@ -44,9 +44,10 @@ type LinkConfig struct {
 }
 
 type InConfig struct {
-	Type     string   `json:"type"`     // ndi | tone
+	Type     string   `json:"type"`     // ndi | card | tone
 	Source   string   `json:"source"`   // NDI source name, e.g. "BOOTH-PC (Talkback)"
-	Channels []int    `json:"channels"` // NDI audio channels to use (0-based), empty = all mixed to mono
+	Device   string   `json:"device"`   // type=card: sound card input name or part of it ("" = default input)
+	Channels []int    `json:"channels"` // audio channels to use (0-based); NDI: empty = all mixed to mono; card: empty = [0]
 	GainDB   float64  `json:"gainDb"`
 	GateDB   *float64 `json:"gateDb"` // talk only when louder than this (dBFS). null/omitted = always on (program feeds)
 	HoldMs   int      `json:"holdMs"` // gate hold time, default 600
@@ -55,9 +56,11 @@ type InConfig struct {
 }
 
 type OutConfig struct {
-	Type   string  `json:"type"` // ndi | null
-	Name   string  `json:"name"` // NDI source name to publish, e.g. "OpenLine IFB Announcers"
-	GainDB float64 `json:"gainDb"`
+	Type     string  `json:"type"`     // ndi | card | null
+	Name     string  `json:"name"`     // NDI source name to publish, e.g. "OpenLine IFB Announcers"
+	Device   string  `json:"device"`   // type=card: sound card output name or part of it ("" = default output)
+	Channels []int   `json:"channels"` // type=card: outputs to play on (0-based); empty = both sides of a stereo card
+	GainDB   float64 `json:"gainDb"`
 }
 
 func LoadConfig(path string) (*Config, error) {

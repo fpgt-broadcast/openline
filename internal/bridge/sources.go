@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"time"
 
@@ -14,6 +15,8 @@ var DefaultOpener = Opener{
 		switch c.Type {
 		case "", "ndi":
 			return ndi.NewReceiver(c.Source, extraIPs, c.Channels)
+		case "card":
+			return openCardIn(c)
 		case "tone":
 			return newTone(c.ToneHz), nil
 		}
@@ -23,6 +26,8 @@ var DefaultOpener = Opener{
 		switch c.Type {
 		case "", "ndi":
 			return ndi.NewSender(c.Name)
+		case "card":
+			return openCardOut(c, log.Default())
 		case "null":
 			return nullOut{}, nil
 		}

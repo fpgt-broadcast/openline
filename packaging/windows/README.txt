@@ -46,6 +46,12 @@ Channel outputs (each channel as its own NDI source and/or sound card output)
   NDI outputs appear as "OpenLine <channel>" (with the show name when there
   are several shows).
 
+Sound card links (e.g. a Saramonic WiTalk9 through its Link cable kit)
+  A link's "in" and "out" can use "type": "card" with "device" set to the
+  sound card name from list-sound-cards.bat, so another headset system joins
+  an OpenLine channel. On the WiTalk9 headset, hold ENC for 3 seconds until
+  the mic light is solid purple. Full guide: docs/BRIDGE.md, "Sound card links".
+
 If Windows SmartScreen warns about an unknown app, click "More info" >
 "Run anyway" (the program isn't code-signed).
 
