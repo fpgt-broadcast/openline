@@ -94,7 +94,7 @@ header.top .who b { font-size: 15px; }
 .card .err { color: #ffb4b6; font-size: 13px; min-height: 18px; margin-top: 8px; }
 .card button.primary { width: 100%; margin-top: 14px; background: #2f3640; }
 
-.flash { animation: idflash .25s steps(2) 12; }
+.flash, .flash .tview { animation: idflash .25s steps(2) 12; } /* the tally screen covers the body */
 @keyframes idflash { 50% { background: #fff; } }
 
 /* ---------- admin ---------- */
