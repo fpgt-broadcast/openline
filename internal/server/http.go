@@ -108,7 +108,7 @@ func securityHeaders(next http.Handler) http.Handler {
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	ip := s.clientIP(r)
-	if s.limiter.blocked(ip) {
+	if s.limiter.blocked(limitKey(ip)) {
 		http.Error(w, "too many failed logins, try again in a minute", http.StatusTooManyRequests)
 		return
 	}
@@ -159,7 +159,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		msg, code := "login failed", websocket.StatusCode(4001)
 		if errors.Is(err, ErrAuth) {
-			s.limiter.fail(ip, ipFailLimit)
+			s.limiter.fail(limitKey(ip), ipFailLimit)
 			if nameKey != "" {
 				s.limiter.fail(nameKey, nameFailLimit)
 			}
@@ -171,7 +171,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		c.Close(code, "login failed")
 		return
 	}
-	s.limiter.ok(ip)
+	s.limiter.ok(limitKey(ip))
 	s.leavePreAuth(ip)
 	preAuth = false
 	sess := s.Hub.Join(user, hello, ip)
@@ -257,7 +257,7 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	ip := s.clientIP(r)
-	if s.limiter.blocked(ip) {
+	if s.limiter.blocked(limitKey(ip)) {
 		http.Error(w, "too many attempts", http.StatusTooManyRequests)
 		return
 	}
@@ -291,12 +291,12 @@ func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 		ok = true
 	}
 	if !ok {
-		s.limiter.fail(ip, ipFailLimit)
+		s.limiter.fail(limitKey(ip), ipFailLimit)
 		s.limiter.fail(key, nameFailLimit)
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
-	s.limiter.ok(ip)
+	s.limiter.ok(limitKey(ip))
 	tok := randHex(24)
 	s.adminMu.Lock()
 	for k, exp := range s.adminTok {
@@ -593,6 +593,17 @@ func (s *Server) leavePreAuth(ip string) {
 }
 
 // ---------------- login rate limiting ----------------
+
+// limitKey is what failed logins are counted against: the IPv4 address, or
+// for IPv6 the /64 block. One IPv6 user usually holds a whole /64 and could
+// otherwise switch to a fresh address every few guesses.
+func limitKey(ip string) string {
+	p := net.ParseIP(ip)
+	if p == nil || p.To4() != nil {
+		return ip
+	}
+	return p.Mask(net.CIDRMask(64, 128)).String() + "/64"
+}
 
 type failRec struct {
 	n     int
