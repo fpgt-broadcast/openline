@@ -7,7 +7,8 @@ OpenLine is a self-hosted, open-source alternative to Unity Intercom, plus a low
 - **Never merge a PR until the owner says "merge it"** (or "merge both"). Open a PR for every change; pushing a branch alone isn't done.
 - PR descriptions: what changed in plain words, then a **Tested** section saying what was actually run and what wasn't (e.g. "not tested on real hardware").
 - Commit as `git -c user.name="OpenLine" -c user.email="openline@localhost" commit …`. Never put model names or IDs in commits, PRs or code.
-- Releases are cut by pushing a `v*` tag (pre-releases as `vX.Y.Z-beta`); `.github/workflows/release.yml` builds everything. Ask the owner before tagging.
+- Releases: a `v*` tag builds everything (`.github/workflows/release.yml`). Cloud sessions can't push tags, so the owner publishes them in GitHub → Releases (tag on `main`, pre-release ticked). Tags so far: `v0.1.0-beta`, `v0.2.0-beta.1`, `v0.3.0-beta`, `v0.3.0-beta2`; next `v0.3.0-beta3`, then `v1.0.0`.
+- Docs stay short and plain: README, `docs/DEPLOY.md`, `docs/BRIDGE.md`, `docs/PROTOCOL.md`. Update them with every user-visible change.
 - Test UI changes in a real browser (Playwright + the preinstalled Chromium) against a running server, at iPhone size too. The owner uses **Safari on iPhone**, so avoid `confirm()`/`alert()` (use the two-tap `sure()` buttons) and check Safari-specific behaviour.
 - The repo moved from `DueHack12/openline` to **`fpgt-broadcast/openline`** (private).
 
@@ -32,7 +33,7 @@ go vet ./... && go test ./...      # all Go tests (bridge tests need libopus: ap
 make build                          # binaries into bin/
 ```
 
-Default server port is **8999** (the owner has other software on 8080). `-self-signed` gives LAN HTTPS. First run prints the admin password; demo users Director/1111 (admin), Camera 1/2222, A1/3333.
+Default server port is **8999** (the owner has other software on 8080). `-self-signed` gives LAN HTTPS. First run prints the admin password and the starter users (Director = admin, Camera 1, A1) with **random 6-digit PINs**; tests pin them to 1111/2222/3333 (`setTestPINs`). Admin-page sign-in with a PIN needs 6+ digits, so in browser tests sign in to admin with the printed password.
 
 Firmware (`firmware/README.md` has details): ESP-IDF v5.3.2. In cloud sessions the component registry is blocked, so build with `IDF_COMPONENT_MANAGER=0`, `OPUS_SRC_DIR=<libopus source>` and `EXTRA_COMPONENT_DIRS` pointing at `led_strip` and `esp_websocket_client` cloned from GitHub. The Python env needed `--no-constraints` plus an empty constraints file and `idf-component-manager~=2.0`.
 
@@ -47,6 +48,9 @@ PortAudio testing without a sound card: define ALSA `type file` PCMs in `~/.asou
 - **Shows** = separate sets of channels and users for running a second show at the same time (Unity calls these groups). Old configs migrate into one "Main" show. Names only need to be unique within a show; same name + PIN across shows is rejected.
 - **Channel outputs**: per channel, NDI and/or "Card out N", played by a bridge login with the **channel outputs** role (`outputs` section in `bridge.json`).
 - Admin Channels tab numbers channels by position; internal ids never change (users, beltpacks, bridge configs refer to them).
+- **Background audio** (Menu, on by default on touch devices): the mix plays through a hidden `<audio>` (MediaStream) plus a looping `silence.wav` so iOS treats it as now playing; the AudioContext is resumed when iOS pauses it. Owner-tested on iPhone: listening works locked and in other apps, talking works from other apps, a locked iPhone mutes the mic (can't be fixed on the web). The lock-screen card shows status / role · person / server · show and the logo. A "Background log" in Menu helps debug.
+- **Security model** (public server behind Cloudflare): per-IP and per-name login limits using `CF-Connecting-IP` from `-trusted-proxy cloudflared`; admin PIN sign-in needs 6+ digits; unassigned beltpacks only connect during the admin's "Accept new beltpacks" window and live in memory until adopted; Wi-Fi settings only go to a beltpack signed in with its user's token; CSP / no framing; admin token only in the Authorization header. Compose publishes 8999 on 127.0.0.1 only.
+- Logo: `web/static/icon.svg` (owner is happy with it), PNGs `icon-192/512.png`, `apple-touch-icon.png`.
 
 ## Hardware status
 
@@ -55,16 +59,18 @@ PortAudio testing without a sound card: define ALSA `type file` PCMs in `~/.asou
 - Case rev D (`hardware/case`): mockup layout on the **top face** (2.42" screen at the far edge, 4 lit keys under it, knob at the end of the row, wearer's view from the belt side). Bottom: XLR-4, **CHG** USB-C (charge module, dock, PoE splitter) and **USB** USB-C (DevKit flashing). RJ45 on the right wall. 90 × 66 × 102 mm.
 - PCBs (PCBWay): two boards, a main board (upright, modules in sockets) and a control board (under the lid). Only outlines and `main_board_layout.svg` exist. **Next step:** when the parts arrive, get caliper measurements (OLED size/window/pins, charge module pads and USB-C position, USR-ES1 pins and jack offset, WM8960 and DevKit pin-row spacing, battery holder size), update `params.scad`, then draw both boards in KiCad and give the owner Gerbers + PCBWay settings. Don't order PCBs before that.
 
-## Open items
+## Open items (road to v1.0)
 
-1. **Open the PR for branch `card-links`** ("Bridge: sound card links (in and out), e.g. Saramonic WiTalk9"). It's pushed and tested (unit test plus an end-to-end PortAudio run with virtual ALSA devices: no echo, real-time pacing) but not on real hardware.
-2. **Saramonic WiTalk9** (the owner has the headset kit, no base): link it through the master or remote headset's TRRS jack with the **WiTalk9 Link cable kit**. Turn on link mode by holding ENC 3 s (mic light solid purple; off after every power-up), keep sidetone off. Likely needs Saramonic's own cable (probably crossed over, since it also cascades two systems), not a generic TRRS or 3-pole aux cable. Setup is in `docs/BRIDGE.md` → "Sound card links".
-3. **Next release** (e.g. `v0.1.1-beta`, ask first): v0.1.0-beta firmware still defaults to the 1.3" SH1106 and ESP32-driven MCLK; the bridge zip gains `portaudio.dll`, channel outputs and card links.
-4. Untested: NDI outputs against a real NDI runtime; physical sound cards; all beltpack hardware.
+v1.0 = server, app and bridge; the beltpack stays **experimental** in v1.
+
+1. **Bridge at the venue** once the owner has the **WiTalk9 Link cable kit**: sound card link with the WiTalk9 (master or remote headset's TRRS jack, hold ENC 3 s until the mic light is solid purple, sidetone off), NDI outputs against a real NDI runtime, vMix tally. Setup: `docs/BRIDGE.md`.
+2. Then release `v0.3.0-beta3` → trial at a show → `v1.0.0`.
+3. After v1: beltpack bring-up (see Hardware status). Firmware version strings still say `0.1.0`.
 
 ## Owner's setup
 
-- Server runs **off-site in OrbStack on a Mac** (`deploy/docker-compose.yml`, Cloudflare tunnel → `http://openline:8999`). Updates: replace the code keeping `deploy/data`, then `docker compose up -d --build`.
+- Server runs **off-site in OrbStack on a Mac** (`deploy/docker-compose.yml`, Cloudflare tunnel → `http://openline:8999`). Updates: replace the code keeping `deploy/data`, then `docker compose up -d --build`. Cloudflare's Browser Cache TTL is set to "Respect Existing Headers" (otherwise phones keep old JS/CSS for 4 h).
+- The crew mostly use iPhones; background audio and the home-screen app are the recommended setup.
 - The bridge runs on a **Windows PC at the venue** (NDI program/announcer feeds, vMix tally, and now sound card links).
 - Phone admin: `/m.html`.
 - The beltpack build guide is a claude.ai artifact: https://claude.ai/artifact/Hu4TmQ7SRq2mHFrXhsCX6i (wiring, parts list, case section). Read it before updating it.

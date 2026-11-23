@@ -58,4 +58,4 @@ If Windows SmartScreen warns about an unknown app, click "More info" >
 To start it automatically with Windows: Task Scheduler > Create Task >
 Trigger "At startup" > Action: start run-bridge.bat.
 
-Full guide: https://github.com/DueHack12/openline/blob/main/docs/BRIDGE.md
+Full guide: docs/BRIDGE.md in the OpenLine repository.

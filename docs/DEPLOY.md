@@ -1,124 +1,67 @@
-# Running the server off-site
+# Running the server
 
-The server is one binary with no dependencies, and it serves the web app itself. Run it on any always-on computer (a small VPS, a mini-PC at the office, a Raspberry Pi 4/5). Each client needs about 35 kbit/s up while talking, and about 35 kbit/s down per person they're hearing.
+The server is one binary (or one Docker container) that also serves the app. Run it on any always-on computer. Each person needs about 35 kbit/s up while talking and 35 kbit/s down per person they hear.
 
-Browsers only allow microphone access over **HTTPS**, so you need one of the options below. Pick whichever matches your situation.
+Browsers only allow the microphone over **HTTPS**, so pick one of these:
 
-## Option 1: Cloudflare Tunnel (recommended, no port forwarding)
+| Option | When | Start it with |
+|---|---|---|
+| **1. Cloudflare Tunnel** (recommended) | Behind a router you don't want to open | `deploy/docker-compose.yml`, below |
+| 2. Let's Encrypt | The server has a public IP; ports 80 + 443 forwarded | `openline-server -domain intercom.example.com` (systemd unit: `deploy/openline.service`) |
+| 3. Tailscale | Private, nothing on the internet | `tailscale serve --bg 8999` (beltpacks can't join a tailnet) |
+| 4. Your own reverse proxy | Caddy, nginx, Traefik already running | `openline-server -listen 127.0.0.1:8999`, proxy `/` including the `/ws` WebSocket |
+| 5. Local network only | No internet at all | `openline-server -self-signed`, accept the certificate warning once per device |
 
-Use this when the server sits behind a router you can't or don't want to open. It's free on a domain managed by Cloudflare.
+Plain `http://192.168.x.x` does **not** work for talking (only `localhost` is exempt); the app says so on the login screen.
+
+## Cloudflare Tunnel
 
 ```bash
 cd deploy
 echo "TUNNEL_TOKEN=<token from Cloudflare Zero Trust > Networks > Tunnels>" > .env
 docker compose up -d
-docker compose logs openline     # shows the first-run admin password
+docker compose logs openline     # first run: admin password and starter PINs
 ```
 
-In the tunnel, add a public hostname such as `intercom.example.com` → `http://openline:8999`. WebSockets work through Cloudflare by default. Then open `https://intercom.example.com/admin.html`, sign in, and set **Server → Public URL** so invite links and QR codes use it.
+1. In the tunnel, add a public hostname, e.g. `intercom.example.com` → `http://openline:8999`.
+2. In the Cloudflare dashboard for your domain: **Caching → Configuration → Browser Cache TTL → Respect Existing Headers**. Otherwise phones keep old app files for hours after an update.
 
-To update the tunnel agent (the Cloudflare dashboard flags old versions as *Unsupported*):
+The compose file only opens port 8999 on the computer itself (`127.0.0.1`), and tells the server to trust the tunnel for visitors' real IPs.
 
-```bash
-docker compose pull cloudflared && docker compose up -d
-```
+**Updating:** replace the code (keep `deploy/data`), then `docker compose up -d --build`. Update the tunnel agent with `docker compose pull cloudflared && docker compose up -d`.
 
-No Docker? Install `cloudflared` and run `cloudflared tunnel run --token …` next to `openline-server`.
+## First setup
 
-The compose file starts the server with `-trusted-proxy cloudflared`, so failed-login limits apply to each visitor's real IP rather than to the tunnel as a whole. It only publishes port 8999 on `127.0.0.1`, so nobody else on your network can reach the server over plain HTTP around Cloudflare.
+The first start prints the **admin password** and the **starter users with random PINs** (Director, Camera 1, A1). Open `/admin.html`:
 
-## Option 2: Public IP + automatic Let's Encrypt
+1. **Server**: set the public URL (used in invite links) and change the admin password.
+2. **Channels**: names and colours. Mark program feeds *listen-only + program*; they dip 12 dB while anyone talks.
+3. **Users**: one per role (e.g. *Camera 1*) with a PIN, an optional person name, and channel access. The channel order is the beltpack key order.
+4. Send each person their **invite link / QR code** (Users → Invite). It signs them in with no typing.
 
-Forward TCP 80 and 443 to the server and point a DNS name at it.
+## Phones
 
-```bash
-./openline-server -domain intercom.example.com -data /var/lib/openline
-```
+- **Background audio** is on by default on phones: people keep hearing everyone with the phone locked or in another app, and the lock screen shows who's talking. Talking works from another app, but **a locked iPhone mutes the mic**, so unlock to talk.
+- **Add to Home Screen** (Share menu) gives a full-screen OpenLine app with its own icon. It keeps its own sign-in, separate from Safari: sign in once inside it.
+- Hands-free talk: a USB foot pedal that sends Space, the keyboard (Space, 1–9, C), or the headphone play/pause button (Menu → Headphone button).
+- On poor cellular data, set **Menu → Network buffer → Safe**.
 
-Certificates are fetched and renewed automatically. See `deploy/openline.service` for a systemd unit.
+## Security
 
-## Option 3: Tailscale (private network)
+The server is meant to sit on the internet. What protects it:
 
-Install Tailscale on the server and every client, then run `tailscale serve --bg 8999`. Everyone uses the `https://<machine>.<tailnet>.ts.net` URL. Nothing is exposed to the internet. Beltpacks can't join a tailnet, so use the BLE phone mode with them, or use Option 1 or 2.
-
-## Option 4: Behind an existing reverse proxy
-
-Run `openline-server -listen 127.0.0.1:8999` and proxy `/` (including the WebSocket upgrade on `/ws`) from Caddy, nginx or Traefik. Caddy example:
-
-```
-intercom.example.com {
-    reverse_proxy 127.0.0.1:8999
-}
-```
-
-## Option 5: Local network only (no internet, no domain)
-
-```bash
-./openline-server -self-signed
-```
-
-This serves `https://<LAN-IP>:8999` with a self-signed certificate made for this machine's addresses (it's stored in `data/` and reused). On each device, accept the warning once. On iPhone Safari that's **Show Details → visit this website**; in Chrome it's **Advanced → Proceed**.
-
-> Plain `http://192.168.x.x` does **not** work for talking. Browsers turn off the microphone and audio engine on non-HTTPS pages (only `localhost` is exempt), and the app says so on the login screen.
-
-## First run
-
-1. Start the server. It prints the **admin password** once, plus the LAN URLs and a QR code.
-2. Open `/admin.html`:
-   - **Server**: set the public URL and change the admin password.
-   - **Channels**: name them, set colours, and mark program feeds *listen-only + program* (they're dipped 12 dB automatically while anyone talks).
-   - **Users**: one per assignment or role (e.g. *Camera 1*), with an optional **Person** (e.g. *John Doe*). People can also type their own name when they sign in; the admin Live tab shows both and has a search box. Choose channel access (*Talk + Listen*, *Listen*…) and order (= beltpack key order). Share the **invite link / QR**. Opening it signs the person in, with no typing.
-3. The demo config has Director/1111, Camera 1/2222 and A1/3333, plus the bridge users *Program Feed* and *Announcer Link*. Change or delete them.
-
-## Connecting clients
-
-| Client | How |
-|---|---|
-| Phone / tablet / computer | Open the invite link (or the URL plus name + PIN). Add it to the home screen to run it full-screen. |
-| Beltpack over Bluetooth | In the app: **Menu → Connect beltpack**. Choose whether audio goes through the beltpack's headset, or through the phone (AirPods, any Bluetooth/wired headset) with the beltpack as the keys and screen. |
-| Beltpack standalone (Wi‑Fi / Ethernet / PoE) | **Admin → Beltpacks → Set up beltpack via Bluetooth** (Chrome/Edge). Enter Wi‑Fi details, the server URL and the user. After that, every beltpack setting can be changed from Admin, including a static IP. |
-| NDI program / announcers | Run `openline-bridge` on a computer at the venue. See [BRIDGE.md](BRIDGE.md). |
-| Hands-free talk | A USB foot pedal that sends Space, the keyboard (Space / 1–9 / C), or the headphone play/pause button (Menu → *Headphone button*). |
-
-## Security on a public server
-
-- **PINs**: anyone on the internet can try them. Give every login its own PIN, 6+ digits for anything important. Signing in to the admin page with a PIN needs 6 or more digits; otherwise use the admin password. The admin page warns about easy PINs such as the demo ones.
-- **Wrong guesses**: 8 wrong logins from one IP, or 20 for one name or for the admin password, block further tries for a minute.
-- **New beltpacks**: a beltpack with no user can only connect while **Admin → Beltpacks → Accept new beltpacks** is on (10 minutes). Beltpacks set up over Bluetooth with a user connect any time. A beltpack's Wi-Fi settings are only sent to it once it has a user and is signed in with that user's token.
-- **Behind another reverse proxy** (Option 4): if it doesn't run on the same machine, start the server with `-trusted-proxy <proxy IP or host name>` so login limits see real visitor IPs.
-
-## Phones in the background (iPhone)
-
-iOS suspends web pages that are swiped away or locked, and it turns their microphone off. A browser app can't keep talking or listening from the lock screen; only a native app with Apple's background-audio permission can (that's how Unity Intercom does it). What the web app does:
-
-- It keeps the screen awake while open (iOS 16.4+), so leave it in the foreground.
-- When you come back to it, it reconnects, restarts audio and re-opens the microphone straight away. If iOS insists on a tap, a banner asks for one.
-- For crew who must pocket the phone, use a beltpack in Wi‑Fi/Ethernet mode, which doesn't depend on the phone at all.
-- iPhone **Guided Access** (Settings → Accessibility) can lock the phone into the app for a show.
-
-Android Chrome keeps playing audio in the background as long as the page is playing sound, but may still pause the microphone.
+- **PINs**: give everyone their own; 6+ digits for anything important. Admin sign-in with a PIN needs 6+ digits, otherwise use the admin password. The Users tab warns about easy PINs.
+- **Wrong guesses**: 8 from one IP, or 20 for one name or the admin password, block more tries for a minute.
+- **New beltpacks** can only connect while **Admin → Beltpacks → Accept new beltpacks** is on (10 minutes). Beltpacks set up over Bluetooth with a user connect any time.
+- **Behind a proxy on another machine**: start the server with `-trusted-proxy <IP or host name>` so the login limits see real visitor IPs.
 
 ## Latency
 
-These figures are mouth to ear, one person to another, over the internet.
-
-| Stage | Typical |
-|---|---|
-| Capture frame + encode | 20–25 ms |
-| Network to server | 10–60 ms |
-| Server forwarding (no mixing, no transcoding) | < 1 ms |
-| Network to listener | 10–60 ms |
-| Jitter buffer (adaptive, starts at 60 ms) | 40–120 ms |
-| Decode + output buffer | 10–30 ms |
-| **Total** | **~100–300 ms** |
-
-NDI sources add one NDI audio block (~20–40 ms) at the bridge, which keeps program and announcer audio well under 1 s.
-
-If a phone on poor cellular data stutters, set **Menu → Network buffer → Safe**.
+About **100–300 ms** mouth to ear over the internet: 20 ms audio frames, the network both ways, and an adaptive jitter buffer (40–120 ms) at the listener. The server only forwards (< 1 ms). NDI adds 20–40 ms at the bridge.
 
 ## Backups
 
-All state lives in `data/config.json` (channels, users, tokens, beltpacks). Back up that file. To reset the admin password:
+Everything lives in `data/config.json`. Back up that file. Forgot the admin password:
 
 ```bash
 openline-server -data ./data -reset-admin 'new-password'

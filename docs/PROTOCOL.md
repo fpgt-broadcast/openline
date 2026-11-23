@@ -16,7 +16,7 @@ There is one WebSocket per client session, at `wss://<server>/ws`. Text frames c
 
 | Message | Notes |
 |---|---|
-| `{"t":"hello","token":"…"}` or `{"t":"hello","user":"Name","pin":"1234"}` | Must be the first message. Add `"client":"web\|beltpack\|bridge"`, `"ver":1`. Beltpacks send `"device":"<mac hex>"`. A beltpack with no token is accepted as *unassigned* so an admin can adopt it. |
+| `{"t":"hello","token":"…"}` or `{"t":"hello","user":"Name","pin":"1234"}` | Must be the first message. Add `"client":"web\|beltpack\|bridge"`, `"ver":1`. Beltpacks send `"device":"<mac hex>"`. A beltpack with no token is accepted as *unassigned* only while the admin's new-beltpack window is open; a token naming a device must be that device's assigned user. |
 | `{"t":"talk","ch":1,"on":true}` | Also `listen` and `call` (call = flash/alert on that channel) |
 | `{"t":"ping","ts":123.4}` | The server answers `pong` with the same `ts` |
 | `{"t":"telemetry","bat":87,"chg":false,"rssi":-60,"net":"wifi","ip":"…","fw":"…","up":3600,"hs":true,"poe":false,"disp":"oled"}` | Beltpacks, every ~5 s. `bat:-1` = external power. |
@@ -32,22 +32,23 @@ There is one WebSocket per client session, at `wss://<server>/ws`. Text frames c
 | `assign` | Beltpack: `{"token","user"}`. Store it and reconnect as that user. |
 | `netcfg` | Beltpack: `{mode, dhcp, ip, mask, gw, dns, ssid, pass, server}`. Store it and reboot. |
 | `settings` | Beltpack: `{name, micType, micGain, sidetone, hpLevel, bright}`. Sent on connect and on change. |
-| `error` | `{"msg":"…"}`. Login failures close the socket with code 4001. |
+| `error` | `{"msg":"…"}`. A failed login closes with code 4001; "not now, try again later" (too many wrong guesses, new-beltpack window closed) with 4002. |
 
 ## Admin REST API
 
-Send `Authorization: Bearer <token>` from `POST /api/admin/login {"password"}` or `{"user","pin"}` (the user must have the admin flag).
+Send `Authorization: Bearer <token>` (header only) from `POST /api/admin/login {"password"}` or `{"user","pin"}` (an admin user with a PIN of 6+ digits). Tokens last 12 h.
 
 | Method & path | Body |
 |---|---|
 | `GET/PUT /api/config` | Whole config (channels, users). Optional `newPassword`. |
 | `GET /api/sessions` | Live sessions, including telemetry |
 | `POST /api/sessions/{sid}/remote` | `{"op":"talk\|listen\|call","ch":1,"on":true}`, `{"op":"mute","on":true}`, `{"op":"vol","ch":1,"v":80}`, `{"op":"identify\|reboot\|kick"}` |
-| `GET /api/devices` | Known beltpacks + live telemetry |
+| `GET /api/devices` | Known beltpacks + live telemetry; `pending: true` = connected, not adopted yet |
 | `PUT /api/devices/{id}` | `{"name","userId","audio":{micType,micGain,sidetone,hpLevel,bright}}` |
 | `PUT /api/devices/{id}/net` | `{"mode":"wifi\|ethernet\|ble","dhcp":false,"ip","mask","gateway","dns","ssid","pass","server"}` |
-| `DELETE /api/devices/{id}` | Forget a beltpack |
-| `GET /api/qr?text=…&k=<token>` | PNG QR code |
+| `DELETE /api/devices/{id}` | Forget a beltpack (also drops a waiting, unassigned one) |
+| `GET/POST /api/pairing` | New-beltpack window: `{"minutes":10}` opens it (max 60), `{"minutes":0}` closes it. Returns `{open, until, secondsLeft}` |
+| `GET /api/qr?text=…` | PNG QR code |
 
 ## Beltpack Bluetooth GATT
 
