@@ -64,6 +64,7 @@ func main() {
 	}
 
 	srv := server.New(store, web.FS())
+	srv.Version = version
 	if *trustedProxy != "" {
 		srv.TrustProxies(strings.Split(*trustedProxy, ","))
 	}

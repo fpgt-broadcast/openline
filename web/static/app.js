@@ -520,6 +520,7 @@ async function openSettings() {
       h('div', { class: 'grid2' },
         h('a', { href: 'admin.html', class: 'small', style: { alignSelf: 'center' } }, 'Admin page'),
         h('button', { onclick: logout }, 'Sign out')),
+      S.version ? h('div', { class: 'small muted', style: { marginTop: '12px', textAlign: 'center' } }, 'OpenLine ' + S.version) : null,
     ));
   });
 }
@@ -808,7 +809,7 @@ function init() {
   } else if (!codecSupport()) {
     showLogin('This browser cannot encode Opus audio (WebCodecs). Use a current Chrome, Edge, Firefox or Safari 26+.');
   }
-  fetch('api/info').then((r) => r.json()).then((i) => { $('loginTitle').textContent = i.server; }).catch(() => {});
+  fetch('api/info').then((r) => r.json()).then((i) => { $('loginTitle').textContent = i.server; S.version = i.version || ''; }).catch(() => {});
   const hash = new URLSearchParams(location.hash.slice(1));
   if (hash.get('t')) {
     S.creds = { token: hash.get('t') };

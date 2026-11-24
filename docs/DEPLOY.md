@@ -28,7 +28,7 @@ docker compose logs openline     # first run: admin password and starter PINs
 
 The compose file only opens port 8999 on the computer itself (`127.0.0.1`), and tells the server to trust the tunnel for visitors' real IPs.
 
-**Updating:** replace the code (keep `deploy/data`), then `docker compose up -d --build`. Update the tunnel agent with `docker compose pull cloudflared && docker compose up -d`.
+**Updating:** replace the code (keep `deploy/data`), then `docker compose up -d --build`. The running version shows at the bottom of the app's Menu and in admin → Server. Update the tunnel agent with `docker compose pull cloudflared && docker compose up -d`.
 
 ## First setup
 

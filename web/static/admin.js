@@ -534,6 +534,7 @@ function renderServer() {
     h('input', { type: 'text', value: c.publicURL || '', placeholder: 'https://intercom.example.com', oninput: (e) => { c.publicURL = e.target.value; setDirty(); } }),
     h('label', {}, 'New admin password (leave empty to keep)'),
     h('input', { type: 'password', autocomplete: 'new-password', oninput: (e) => { A.newPassword = e.target.value; setDirty(); } }),
+    A.version ? h('div', { class: 'small muted', style: { marginTop: '12px' } }, 'Server version: ' + A.version) : null,
   ));
 }
 
@@ -553,6 +554,7 @@ async function refresh() {
 
 async function loadConfig() {
   A.cfg = await api('GET', 'config');
+  fetch('api/info').then((r) => r.json()).then((i) => { A.version = i.version || ''; if (A.tab === 'server') renderServer(); }).catch(() => {});
   $('title').textContent = A.cfg.serverName + ' · Admin';
   setDirty(false);
 }

@@ -4,7 +4,8 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /openline-server ./cmd/openline-server
+# The version comes from the VERSION file (the build has no git history).
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=$(cat VERSION 2>/dev/null || echo dev)" -o /openline-server ./cmd/openline-server
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /openline-server /openline-server
