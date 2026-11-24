@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -491,5 +492,41 @@ func TestFreshServerHasRandomPINs(t *testing.T) {
 		if len(u.PIN) != 6 || u.PIN == "111111" || strings.Trim(u.PIN, "0123456789") != "" {
 			t.Fatalf("starter PIN for %s = %q, want 6 random digits", u.Name, u.PIN)
 		}
+	}
+}
+
+// IPv6 visitors are limited per /64 block, so rotating addresses inside one
+// block doesn't reset the count of wrong guesses.
+func TestLoginLimitIPv6Block(t *testing.T) {
+	if k1, k2 := limitKey("2a04:4e41:360a:2898::30b9:4898"), limitKey("2a04:4e41:360a:2898:dead:beef:1:2"); k1 != k2 || k1 != "2a04:4e41:360a:2898::/64" {
+		t.Fatalf("same /64 gave keys %q and %q", k1, k2)
+	}
+	if limitKey("2a04:4e41:360a:2899::1") == limitKey("2a04:4e41:360a:2898::1") {
+		t.Fatal("different /64 blocks share a key")
+	}
+	if limitKey("203.0.113.7") != "203.0.113.7" {
+		t.Fatal("IPv4 key changed")
+	}
+	h := newHarness(t)
+	h.srv.TrustProxies([]string{"127.0.0.1"})
+	h.admin = ""
+	for i := 0; i < ipFailLimit; i++ {
+		req, _ := http.NewRequest("POST", h.ts.URL+"/api/admin/login", strings.NewReader(`{"password":"wrong"}`))
+		req.Header.Set("CF-Connecting-IP", fmt.Sprintf("2001:db8:1:2::%x", i+1)) // a new address every try
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+	}
+	req, _ := http.NewRequest("POST", h.ts.URL+"/api/admin/login", strings.NewReader(`{"password":"wrong"}`))
+	req.Header.Set("CF-Connecting-IP", "2001:db8:1:2::ffff")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("after %d wrong guesses from one /64, got %d, want 429", ipFailLimit, resp.StatusCode)
 	}
 }

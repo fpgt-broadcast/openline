@@ -51,7 +51,7 @@ The first start prints the **admin password** and the **starter users with rando
 The server is meant to sit on the internet. What protects it:
 
 - **PINs**: give everyone their own; 6+ digits for anything important. Admin sign-in with a PIN needs 6+ digits, otherwise use the admin password. The Users tab warns about easy PINs.
-- **Wrong guesses**: 8 from one IP, or 20 for one name or the admin password, block more tries for a minute.
+- **Wrong guesses**: 8 from one IP (for IPv6, one /64 block), or 20 for one name or the admin password, block more tries for a minute.
 - **New beltpacks** can only connect while **Admin → Beltpacks → Accept new beltpacks** is on (10 minutes). Beltpacks set up over Bluetooth with a user connect any time.
 - **Behind a proxy on another machine**: start the server with `-trusted-proxy <IP or host name>` so the login limits see real visitor IPs.
 
