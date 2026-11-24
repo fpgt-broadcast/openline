@@ -25,6 +25,8 @@ type Server struct {
 	Hub   *Hub
 	Web   fs.FS // static web client
 
+	Version string // shown in the app and admin (GET /api/info)
+
 	adminMu  sync.Mutex
 	adminTok map[string]time.Time
 
@@ -252,7 +254,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Store.Get()
-	writeJSON(w, map[string]any{"server": cfg.ServerName, "publicURL": cfg.PublicURL, "protocol": proto.Version})
+	writeJSON(w, map[string]any{"server": cfg.ServerName, "publicURL": cfg.PublicURL, "protocol": proto.Version, "version": s.Version})
 }
 
 func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {

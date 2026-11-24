@@ -530,3 +530,13 @@ func TestLoginLimitIPv6Block(t *testing.T) {
 		t.Fatalf("after %d wrong guesses from one /64, got %d, want 429", ipFailLimit, resp.StatusCode)
 	}
 }
+
+func TestInfoReportsVersion(t *testing.T) {
+	h := newHarness(t)
+	h.srv.Version = "v1.2.3"
+	var info struct{ Version string }
+	h.do("GET", "/api/info", nil, &info, 200)
+	if info.Version != "v1.2.3" {
+		t.Fatalf("version = %q", info.Version)
+	}
+}

@@ -7,7 +7,7 @@ OpenLine is a self-hosted, open-source alternative to Unity Intercom, plus a low
 - **Never merge a PR until the owner says "merge it"** (or "merge both"). Open a PR for every change; pushing a branch alone isn't done.
 - PR descriptions: what changed in plain words, then a **Tested** section saying what was actually run and what wasn't (e.g. "not tested on real hardware").
 - Commit as `git -c user.name="OpenLine" -c user.email="openline@localhost" commit …`. Never put model names or IDs in commits, PRs or code.
-- Releases: a `v*` tag builds everything (`.github/workflows/release.yml`). Cloud sessions can't push tags, so the owner publishes them in GitHub → Releases (tag on `main`, pre-release ticked). Tags so far: `v0.1.0-beta`, `v0.2.0-beta.1`, `v0.3.0-beta`, `v0.3.0-beta2`; next `v0.3.0-beta3`, then `v1.0.0`.
+- Releases: a `v*` tag builds everything (`.github/workflows/release.yml`). Cloud sessions can't push tags, so the owner publishes them in GitHub → Releases (tag on `main`, pre-release ticked). Tags so far: `v0.1.0-beta`, `v0.2.0-beta.1`, `v0.3.0-beta1`, `v0.3.0-beta2`, `v1.0.0`. Before a release, set the `VERSION` file to the new tag: Docker builds (the owner's server) read it; other builds use `git describe`. The version shows in the app Menu, admin → Server and `/api/info`.
 - Docs stay short and plain: README, `docs/DEPLOY.md`, `docs/BRIDGE.md`, `docs/PROTOCOL.md`. Update them with every user-visible change.
 - Test UI changes in a real browser (Playwright + the preinstalled Chromium) against a running server, at iPhone size too. The owner uses **Safari on iPhone**, so avoid `confirm()`/`alert()` (use the two-tap `sure()` buttons) and check Safari-specific behaviour.
 - The repo moved from `DueHack12/openline` to **`fpgt-broadcast/openline`** (private).
@@ -59,13 +59,12 @@ PortAudio testing without a sound card: define ALSA `type file` PCMs in `~/.asou
 - Case rev D (`hardware/case`): mockup layout on the **top face** (2.42" screen at the far edge, 4 lit keys under it, knob at the end of the row, wearer's view from the belt side). Bottom: XLR-4, **CHG** USB-C (charge module, dock, PoE splitter) and **USB** USB-C (DevKit flashing). RJ45 on the right wall. 90 × 66 × 102 mm.
 - PCBs (PCBWay): two boards, a main board (upright, modules in sockets) and a control board (under the lid). Only outlines and `main_board_layout.svg` exist. **Next step:** when the parts arrive, get caliper measurements (OLED size/window/pins, charge module pads and USB-C position, USR-ES1 pins and jack offset, WM8960 and DevKit pin-row spacing, battery holder size), update `params.scad`, then draw both boards in KiCad and give the owner Gerbers + PCBWay settings. Don't order PCBs before that.
 
-## Open items (road to v1.0)
+## Open items (after v1.0)
 
-v1.0 = server, app and bridge; the beltpack stays **experimental** in v1.
+v1.0 = server, app and bridge; the beltpack is **experimental**. v1.0 shipped before the venue bridge test, at the owner's call.
 
-1. **Bridge at the venue** once the owner has the **WiTalk9 Link cable kit**: sound card link with the WiTalk9 (master or remote headset's TRRS jack, hold ENC 3 s until the mic light is solid purple, sidetone off), NDI outputs against a real NDI runtime, vMix tally. Setup: `docs/BRIDGE.md`.
-2. Then release `v0.3.0-beta3` → trial at a show → `v1.0.0`.
-3. After v1: beltpack bring-up (see Hardware status). Firmware version strings still say `0.1.0`.
+1. **Bridge at the venue** once the owner has the **WiTalk9 Link cable kit**: sound card link with the WiTalk9 (master or remote headset's TRRS jack, hold ENC 3 s until the mic light is solid purple, sidetone off), NDI outputs against a real NDI runtime, vMix tally. Setup: `docs/BRIDGE.md`. Fixes go out as `v1.0.x`.
+2. Beltpack bring-up (see Hardware status). Firmware version strings still say `0.1.0`.
 
 ## Owner's setup
 
