@@ -90,6 +90,7 @@ jobs:
             -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
             -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres \
             -DCMAKE_BUILD_TYPE=Release -DPA_BUILD_SHARED=ON -DPA_BUILD_STATIC=OFF -DPA_USE_ASIO=OFF \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
             -DCMAKE_SHARED_LINKER_FLAGS="-static-libgcc -static"
           cmake --build "$RUNNER_TEMP/portaudio-win" -j 4
       - uses: actions/download-artifact@v4
